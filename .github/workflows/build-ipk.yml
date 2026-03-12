@@ -103,6 +103,7 @@ jobs:
         with:
           name: ${{ env.APK_ASSET_NAME }}
           path: .github/${{ env.APK_ASSET_NAME }}
+          archive: false
 
       - name: Publishing IPK files to GitHub Artifacts
         uses: actions/upload-artifact@v7
@@ -110,6 +111,7 @@ jobs:
         with:
           name: ${{ env.IPK_ASSET_NAME }}
           path: .github/${{ env.IPK_ASSET_NAME }}
+          archive: false
 
       - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
