@@ -139,6 +139,8 @@ jobs:
               "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$(basename "$f")" \
               --data-binary @"$f"
           done
+          exit 0
+
       - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
