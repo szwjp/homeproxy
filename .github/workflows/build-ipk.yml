@@ -120,17 +120,16 @@ jobs:
 
       - name: Publish to Latest Build Release
         if: github.event_name != 'release'
-        uses: ncipollo/release-action@v1
-        with:
-          token: ${{ github.token }}
-          tag: latest-build
-          name: Latest Build
-          body: |
-            Automatically built from `master` branch.
-            Updated on every push and weekly schedule.
-          prerelease: true
-          allowUpdates: true
-          artifacts: .github/luci-app-homeproxy_*.apk,.github/luci-app-homeproxy_*.ipk
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd .github
+          gh release delete latest-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest-build \
+            --title "Latest Build" \
+            --notes "Automatically built from \`master\` branch. Updated on every push and weekly schedule." \
+            --prerelease \
+            luci-app-homeproxy_*.apk luci-app-homeproxy_*.ipk
 
       - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
