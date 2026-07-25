@@ -120,17 +120,37 @@ jobs:
 
       - name: Publish to Latest Build Release
         if: github.event_name != 'release'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          cd .github
-          gh release delete latest-build --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest-build \
-            --title "Latest Build" \
-            --notes "Automatically built from \`master\` branch. Updated on every push and weekly schedule." \
-            --prerelease \
-            luci-app-homeproxy_*.apk luci-app-homeproxy_*.ipk
-
+          # Delete existing release if any
+          RELEASE_ID=$(curl -sL \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest-build" | jq -r '.id // empty')
+          if [ -n "$RELEASE_ID" ]; then
+            curl -sL -X DELETE \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+            git push origin :latest-build 2>/dev/null || true
+          fi
+          # Create new release
+          RELEASE_ID=$(curl -sL -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -d '{"tag_name":"latest-build","name":"Latest Build","body":"Automatically built.","prerelease":true}' \
+            | jq -r '.id')
+          # Upload assets
+          for f in .github/luci-app-homeproxy_*.apk .github/luci-app-homeproxy_*.ipk; do
+            [ -f "$f" ] || continue
+            curl -sL -X POST \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$(basename "$f")" \
+              --data-binary @"$f"
+          done
       - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
