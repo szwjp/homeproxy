@@ -118,6 +118,21 @@ jobs:
           path: .github/${{ env.IPK_ASSET_NAME }}
           archive: false
 
+      - name: Publish to Latest Build Release
+        if: github.event_name != 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ github.token }}
+          tag_name: latest-build
+          name: Latest Build
+          body: |
+            Automatically built from `master` branch.
+            Updated on every push and weekly schedule.
+          prerelease: true
+          files: |
+            .github/luci-app-homeproxy_*.apk
+            .github/luci-app-homeproxy_*.ipk
+
       - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
