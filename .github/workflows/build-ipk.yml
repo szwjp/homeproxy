@@ -101,27 +101,18 @@ jobs:
           pushd .github
           fakeroot bash build-ipk.sh apk "${{ github.event_name }}"
           fakeroot bash build-ipk.sh ipk "${{ github.event_name }}"
-          echo "APK_ASSET_NAME=$(ls *.apk)" >> $GITHUB_ENV
-          echo "IPK_ASSET_NAME=$(ls *.ipk)" >> $GITHUB_ENV
+          echo "APK_FILES=$(ls *.apk | tr '\n' ' ')" >> $GITHUB_ENV
+          echo "IPK_FILES=$(ls *.ipk | tr '\n' ' ')" >> $GITHUB_ENV
           popd
 
-      - name: Publishing APK files to GitHub Artifacts
+      - name: Publishing packages to GitHub Artifacts
         uses: actions/upload-artifact@v7
         if: github.event_name != 'release'
         with:
-          name: ${{ env.APK_ASSET_NAME }}
-          path: .github/${{ env.APK_ASSET_NAME }}
-          archive: false
+          name: homeproxy-packages
+          path: .github/*.{apk,ipk}
 
-      - name: Publishing IPK files to GitHub Artifacts
-        uses: actions/upload-artifact@v7
-        if: github.event_name != 'release'
-        with:
-          name: ${{ env.IPK_ASSET_NAME }}
-          path: .github/${{ env.IPK_ASSET_NAME }}
-          archive: false
-
-            - name: Publish to Latest Build Release
+      - name: Publish to Latest Build Release
         if: github.event_name != 'release'
         run: |
           cd .github
@@ -132,7 +123,7 @@ jobs:
             sleep 2
           fi
           NEW_ID=$(curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" "https://api.github.com/repos/${{ github.repository }}/releases" -d '{"tag_name":"latest-build","name":"Latest Build","body":"Automatically built. Updated on every push.","prerelease":true}' | jq -r '.id')
-          for f in luci-app-homeproxy_*.apk luci-app-homeproxy_*.ipk; do
+          for f in luci-app-homeproxy_*.apk luci-app-homeproxy_*.ipk luci-i18n-homeproxy-*.apk luci-i18n-homeproxy-*.ipk; do
             [ -f "$f" ] && curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/${{ github.repository }}/releases/$NEW_ID/assets?name=$f" --data-binary "@$f" || true
           done
           exit 0

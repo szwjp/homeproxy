@@ -157,4 +157,33 @@ default_prerm $0 $@' > "$TEMP_PKG_DIR/CONTROL/prerm"
 	mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk"
 fi
 
+I18N_NAME="luci-i18n-homeproxy-zh-cn"
+I18N_DIR="$TEMP_DIR/$I18N_NAME"
+mkdir -p "$I18N_DIR/usr/lib/lua/luci/i18n/"
+cp "$TEMP_PKG_DIR/usr/lib/lua/luci/i18n/homeproxy.zh-cn.lmo" "$I18N_DIR/usr/lib/lua/luci/i18n/"
+
+if [ "$PKG_MGR" == "apk" ]; then
+	find "$I18N_DIR" -type f,l -printf '/%P\n' | sort > "$TEMP_DIR/i18n.list"
+	apk mkpkg \
+		--info "name:$I18N_NAME" \
+		--info "version:$PKG_VERSION" \
+		--info "description:HomeProxy Chinese translation" \
+		--info "arch:noarch" \
+		--info "depends:$PKG_NAME" \
+		--files "$I18N_DIR" \
+		--output "$TEMP_DIR/${I18N_NAME}_${PKG_VERSION}.apk"
+	mv "$TEMP_DIR/${I18N_NAME}_${PKG_VERSION}.apk" "$BASE_DIR/${I18N_NAME}_${PKG_VERSION}_all.apk"
+else
+	mkdir -p "$I18N_DIR/CONTROL/"
+	cat > "$I18N_DIR/CONTROL/control" <<-EOFCTRL
+		Package: $I18N_NAME
+		Version: $PKG_VERSION
+		Depends: $PKG_NAME
+		Architecture: all
+		Description: HomeProxy Chinese translation
+	EOFCTRL
+	ipkg-build -m "" "$I18N_DIR" "$TEMP_DIR"
+	mv "$TEMP_DIR/${I18N_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${I18N_NAME}_${PKG_VERSION}_all.ipk"
+fi
+
 rm -rf "$TEMP_DIR"
