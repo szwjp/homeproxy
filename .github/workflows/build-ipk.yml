@@ -101,8 +101,6 @@ jobs:
           pushd .github
           fakeroot bash build-ipk.sh apk "${{ github.event_name }}"
           fakeroot bash build-ipk.sh ipk "${{ github.event_name }}"
-          echo "APK_FILES=$(ls *.apk | tr '\n' ' ')" >> $GITHUB_ENV
-          echo "IPK_FILES=$(ls *.ipk | tr '\n' ' ')" >> $GITHUB_ENV
           popd
 
       - name: Publishing packages to GitHub Artifacts
@@ -115,20 +113,33 @@ jobs:
       - name: Publish to Latest Build Release
         if: github.event_name != 'release'
         run: |
+          set -ex
           cd .github
+          # Delete old release
           OLD_ID=$(curl -fsS -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest-build" | jq -r '.id') || true
           if [ "$OLD_ID" != "null" ] && [ -n "$OLD_ID" ]; then
-            curl -fsS -X DELETE -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository }}/releases/$OLD_ID" || true
-            git push origin :latest-build 2>/dev/null || true
+            curl -fsS -X DELETE -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository }}/releases/$OLD_ID"
             sleep 2
           fi
+          # Delete and recreate tag
+          git push origin :latest-build 2>/dev/null || true
+          # Create new release
           NEW_ID=$(curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" "https://api.github.com/repos/${{ github.repository }}/releases" -d '{"tag_name":"latest-build","name":"Latest Build","body":"Automatically built. Updated on every push.","prerelease":true}' | jq -r '.id')
+          echo "Created release id=$NEW_ID"
+          # Upload
           for f in luci-app-homeproxy_*.apk luci-app-homeproxy_*.ipk luci-i18n-homeproxy-*.apk luci-i18n-homeproxy-*.ipk; do
-            [ -f "$f" ] && curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/${{ github.repository }}/releases/$NEW_ID/assets?name=$f" --data-binary "@$f" || true
+            [ -f "$f" ] || continue
+            curl -fsS -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/${{ github.repository }}/releases/$NEW_ID/assets?name=$f" --data-binary "@$f"
+            echo "Uploaded $f"
           done
-          exit 0
-
-- name: Publishing to GitHub Releases
+            curl -sL -X POST \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/octet-stream" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$(basename "$f")" \
+              --data-binary @"$f"
+          done
+      - name: Publishing to GitHub Releases
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
         with:
