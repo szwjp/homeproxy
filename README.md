@@ -15,9 +15,7 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 - **ACME 选项布尔判断**（`generate_server.uc`）：`disable_tls_alpn_challenge` 字段直接使用原始字符串值判断，导致用户设为 `'0'` 时仍为 true；已改用 `strToBool()` 正确处理
 - **路由模式拼写错误**（`update_subscriptions.uc`）：默认路由模式 `bypass_mainalnd_china` 缺少字母 `l`，导致订阅更新脚本在不设置 routing_mode 时使用错误默认值；已修正为 `bypass_mainland_china`
 
-## TODO
+###替换sing-box更新源
+原脚本上游更新源部分分流规则更新不及时，导致分流错误。替换活跃规则集更新源
+<img width="1190" height="148" alt="image" src="https://github.com/user-attachments/assets/476ccfc8-33da-40a7-8e3a-91502c5c427c" />
 
-- Subscription page slow response with a large number of nodes
-- Refactor nft rules
-- Move ACL settings to a dedicated page
-- Any other improvements
