@@ -851,21 +851,21 @@ if (!isEmpty(main_node)) {
 			type: 'remote',
 			tag: 'geoip-cn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/1715173329/IPCIDR-CHINA@rule-set/cn.srs',
+			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs',
 			download_detour: 'direct-out'
 		});
 		push(config.route.rule_set, {
 			type: 'remote',
 			tag: 'geosite-cn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/1715173329/sing-geosite@rule-set-unstable/geosite-geolocation-cn.srs',
+			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-geolocation-cn.srs',
 			download_detour: 'direct-out'
 		});
 		push(config.route.rule_set, {
 			type: 'remote',
 			tag: 'geosite-noncn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/1715173329/sing-geosite@rule-set-unstable/geosite-geolocation-!cn.srs',
+			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-geolocation-!cn.srs',
 			download_detour: 'direct-out'
 		});
 	}
