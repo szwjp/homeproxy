@@ -76,13 +76,11 @@ if (routing_mode !== 'custom') {
 	}
 	dns_default_strategy = (ipv6_support !== '1') ? 'ipv4_only' : null;
 
-	direct_domain_list = trim(readfile(HP_DIR + '/resources/direct_list.txt'));
-	if (direct_domain_list)
-		direct_domain_list = split(direct_domain_list, /[\r\n]/);
+	const direct_list_raw = readfile(HP_DIR + '/resources/direct_list.txt');
+	direct_domain_list = direct_list_raw ? split(trim(direct_list_raw), /[\r\n]/) : [];
 
-	proxy_domain_list = trim(readfile(HP_DIR + '/resources/proxy_list.txt'));
-	if (proxy_domain_list)
-		proxy_domain_list = split(proxy_domain_list, /[\r\n]/);
+	const proxy_list_raw = readfile(HP_DIR + '/resources/proxy_list.txt');
+	proxy_domain_list = proxy_list_raw ? split(trim(proxy_list_raw), /[\r\n]/) : [];
 
 } else {
 	/* DNS settings */

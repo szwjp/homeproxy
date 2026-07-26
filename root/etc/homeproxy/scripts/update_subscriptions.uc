@@ -70,6 +70,8 @@ const node_cache = {},
 
 const ubus = connect();
 const sing_features = ubus.call('luci.homeproxy', 'singbox_get_features', {}) || {};
+if (isEmpty(sing_features))
+	log('Warning: Failed to query sing-box features via ubus, assuming defaults.');
 /* Common var end */
 
 /* Log */
@@ -195,7 +197,7 @@ function parse_uri(uri) {
 		case 'socks':
 		case 'socks4':
 		case 'socks4a':
-		case 'socsk5':
+		case 'socks5':
 		case 'socks5h':
 			url = parseURL('http://' + uri[1]) || {};
 
@@ -322,10 +324,10 @@ function parse_uri(uri) {
 
 			/* Unsupported protocol */
 			if (params.type === 'kcp') {
-				log(sprintf('Skipping sunsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
+				log(sprintf('Skipping unsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
 				return null;
 			} else if (params.type === 'quic' && ((params.quicSecurity && params.quicSecurity !== 'none') || !sing_features.with_quic)) {
-				log(sprintf('Skipping sunsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
+				log(sprintf('Skipping unsupported %s node: %s.', uri[0], urldecode(url.hash) || url.hostname));
 				if (!sing_features.with_quic)
 					log(sprintf('Please rebuild sing-box with %s support!', 'QUIC'));
 
@@ -498,6 +500,7 @@ function main() {
 			if (nodes[0].server && nodes[0].method)
 				map(nodes, (_, i) => nodes[i].nodetype = 'sip008');
 		} catch(e) {
+			log(sprintf('JSON parse failed for %s, trying base64: %s', url, e.message));
 			nodes = decodeBase64Str(res);
 			nodes = nodes ? split(trim(replace(nodes, / /g, '_')), '\n') : [];
 		}
@@ -536,7 +539,7 @@ function main() {
 			}
 		}
 
-		if (count == 0)
+		if (count === 0)
 			log(sprintf('No valid node found in %s.', url));
 		else
 			log(sprintf('Successfully fetched %s nodes of total %s from %s.', count, length(nodes), url));
@@ -559,11 +562,11 @@ function main() {
 		if (!cfg.grouphash)
 			return null;
 
-		/* Empty object - failed to fetch nodes */
-		if (length(node_cache[cfg.grouphash]) === 0)
+		/* Empty object - failed to fetch nodes, or subscription URL not yet processed */
+		if (!node_cache[cfg.grouphash] || length(node_cache[cfg.grouphash]) === 0)
 			return null;
 
-		if (!node_cache[cfg.grouphash] || !node_cache[cfg.grouphash][cfg['.name']]) {
+		if (!node_cache[cfg.grouphash][cfg['.name']]) {
 			uci.delete(uciconfig, cfg['.name']);
 			removed++;
 

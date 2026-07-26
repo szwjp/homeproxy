@@ -74,6 +74,8 @@ export function wGET(url, ua) {
 		ua = 'Wget/1.21 (HomeProxy, like v2rayN)';
 
 	const output = executeCommand(`/usr/bin/wget -qO- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
+	if (output.exitcode !== 0)
+		return null;
 	return trim(output.stdout);
 };
 /* Utilities end */
@@ -141,8 +143,8 @@ export function decodeBase64Str(str) {
 		return null;
 
 	str = trim(str);
-	str = replace(str, '_', '/');
-	str = replace(str, '-', '+');
+	str = replace(str, /_/g, '/');
+	str = replace(str, /-/g, '+');
 
 	const padding = length(str) % 4;
 	if (padding)
