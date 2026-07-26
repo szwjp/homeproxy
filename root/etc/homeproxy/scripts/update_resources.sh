@@ -35,8 +35,23 @@ check_list_update() {
 		return 2
 	fi
 
-	[ -z "$github_token" ] || github_token="--header=Authorization: Bearer $github_token"
-	local list_info="$($wget "${github_token:--q}" -O- "https://api.github.com/repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
+	# Use header file to avoid exposing token in process listing
+	local github_header_file=""
+	if [ -n "$github_token" ]; then
+		github_header_file="$RUN_DIR/.gh_header_${listtype}"
+		printf 'Authorization: Bearer %s\n' "$github_token" > "$github_header_file"
+	fi
+
+	local list_info="$($wget ${github_header_file:+--header-file=$github_header_file} -O- "https://api.github.com/repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
+	local wget_exit=$?
+
+	# Clean up header file immediately
+	[ -n "$github_header_file" ] && rm -f "$github_header_file"
+
+	if [ $wget_exit -ne 0 ]; then
+		log "[$(to_upper "$listtype")] Failed to fetch version info (wget exit $wget_exit)."
+		return 1
+	fi
 	local list_sha="$(echo -e "$list_info" | jsonfilter -qe "@[0].sha")"
 	local list_ver="$(echo -e "$list_info" | jsonfilter -qe "@[0].commit.message" | grep -Eo "[0-9-]+" | tr -d '-')"
 	if [ -z "$list_sha" ] || [ -z "$list_ver" ]; then
@@ -55,13 +70,18 @@ check_list_update() {
 
 	if ! $wget "https://fastly.jsdelivr.net/gh/$listrepo@$list_sha/$listname" -O "$RUN_DIR/$listname" || [ ! -s "$RUN_DIR/$listname" ]; then
 		rm -f "$RUN_DIR/$listname"
-		log "[$(to_upper "$listtype")] Update failed."
+		log "[$(to_upper "$listtype")] Download failed."
 		return 1
 	fi
 
-	mv -f "$RUN_DIR/$listname" "$RESOURCES_DIR/$listtype.${listname##*.}"
-	echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
-	log "[$(to_upper "$listtype")] Successfully updated."
+	if mv -f "$RUN_DIR/$listname" "$RESOURCES_DIR/$listtype.${listname##*.}"; then
+		echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
+		log "[$(to_upper "$listtype")] Successfully updated."
+	else
+		rm -f "$RUN_DIR/$listname"
+		log "[$(to_upper "$listtype")] Failed to install update (mv failed)."
+		return 1
+	fi
 
 	return 0
 }

@@ -64,7 +64,7 @@ if (!uci.get(uciconfig, ucimigration))
 /* delete old crontab command */
 const migration_crontab = uci.get(uciconfig, ucimigration, 'crontab');
 if (!migration_crontab) {
-	system('sed -i "/update_crond.sh/d" "/etc/crontabs/root" 2>"/dev/null"');
+	system('sed -i "/update_crond.sh/d" "/etc/crontabs/root" 2>/dev/null');
 	uci.set(uciconfig, ucimigration, 'crontab', '1');
 }
 
