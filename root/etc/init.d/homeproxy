@@ -105,7 +105,7 @@ start_service() {
 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
 				"$HP_DIR/resources/proxy_list.txt" > "$DNSMASQ_DIR/proxy_list.conf"
 		fi
-		/etc/init.d/dnsmasq restart >"/dev/null" 2>>"$LOG_PATH"
+		/etc/init.d/dnsmasq restart >"/dev/null" 2>\&1
 
 		# Setup routing table
 		local table_mark
@@ -249,11 +249,11 @@ start_service() {
 	chown -R sing-box:sing-box "$RUN_DIR"
 
 	# Setup firewall
-	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>>"$LOG_PATH" || log "Error: firewall pre-script failed."
+	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>/dev/null || log "Error: firewall pre-script failed."
 	if [ "$outbound_node" != "nil" ]; then
-		utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft" 2>>"$LOG_PATH" || log "Error: firewall post-script failed."
+		utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft" 2>/dev/null || log "Error: firewall post-script failed."
 	fi
-	fw4 reload >>"$LOG_PATH" 2>&1 || log "Error: fw4 reload failed."
+	fw4 reload >"/dev/null" 2>&1 || log "Error: fw4 reload failed."
 
 	log "sing-box $(sing-box version -n 2>/dev/null || echo "unknown") started."
 }
@@ -307,7 +307,7 @@ stop_service() {
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_forward.nft"
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_input.nft"
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_post.nft"
-	fw4 reload >>"$LOG_PATH" 2>&1 || log "Warning: fw4 reload failed during stop."
+	fw4 reload >"/dev/null" 2>&1
 
 	# Remove DNS hijack
 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
