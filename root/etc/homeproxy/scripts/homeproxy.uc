@@ -135,6 +135,46 @@ export function validation(datatype, data) {
 	const ret = system(`/sbin/validate_data ${shellQuote(datatype)} ${shellQuote(data)} 2>/dev/null`);
 	return (ret === 0);
 };
+
+/* Validate IP/CIDR format to prevent nftables template injection from resource files */
+export function isValidCIDR(addr, family) {
+	if (isEmpty(addr))
+		return false;
+
+	/* Strip leading/trailing whitespace */
+	addr = trim(addr);
+	if (!addr)
+		return false;
+
+	/* Split address and optional prefix */
+	const parts = split(addr, '/');
+	const ip = parts[0];
+	const prefix = parts[1];
+
+	/* Validate IP part */
+	if (family === 4) {
+		if (!match(ip, /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/))
+			return false;
+		/* Validate octet ranges */
+		const octets = split(ip, '.');
+		for (let o in octets)
+			if (int(o) > 255)
+				return false;
+		/* Validate prefix if present */
+		if (prefix && (int(prefix) < 0 || int(prefix) > 32))
+			return false;
+	} else if (family === 6) {
+		/* Basic IPv6 format check: allow compressed notation */
+		if (!match(ip, /^[0-9a-fA-F:]+$/))
+			return false;
+		if (prefix && (int(prefix) < 0 || int(prefix) > 128))
+			return false;
+	} else {
+		return false;
+	}
+
+	return true;
+};
 /* String helper end */
 
 /* String parser start */

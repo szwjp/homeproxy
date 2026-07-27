@@ -307,7 +307,7 @@ stop_service() {
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_forward.nft"
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_input.nft"
 	echo 2>"/dev/null" > "$RUN_DIR/fw4_post.nft"
-	fw4 reload >"/dev/null" 2>&1
+	fw4 reload >>"$LOG_PATH" 2>&1 || log "Warning: fw4 reload failed during stop."
 
 	# Remove DNS hijack
 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
@@ -332,6 +332,36 @@ service_stopped() {
 
 reload_service() {
 	log "Reloading service..."
+
+	# Pre-validate: generate and check config before stopping running instance
+	config_load "$CONF"
+	local routing_mode
+	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
+
+	local outbound_node
+	if [ "$routing_mode" != "custom" ]; then
+		config_get outbound_node "config" "main_node" "nil"
+	else
+		config_get outbound_node "routing" "default_outbound" "nil"
+	fi
+
+	if [ "$outbound_node" != "nil" ]; then
+		ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
+		if ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
+			log "Error: new client config is invalid, reload aborted."
+			return 1
+		fi
+	fi
+
+	local server_enabled
+	config_get_bool server_enabled "server" "enabled" "0"
+	if [ "$server_enabled" = "1" ]; then
+		ucode -S "$HP_DIR/scripts/generate_server.uc" 2>>"$LOG_PATH"
+		if ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
+			log "Error: new server config is invalid, reload aborted."
+			return 1
+		fi
+	fi
 
 	stop
 	start

@@ -3,7 +3,7 @@
 {%-
 import { readfile } from 'fs';
 import { cursor } from 'uci';
-import { isEmpty } from '/etc/homeproxy/scripts/homeproxy.uc';
+import { isEmpty, isValidCIDR } from '/etc/homeproxy/scripts/homeproxy.uc';
 
 const fw4 = require('fw4');
 
@@ -182,7 +182,9 @@ set homeproxy_mainland_addr_v4 {
 	auto-merge
 	elements = {
 		{% for (let cnip4 in split(trim(readfile(resources_dir + '/china_ip4.txt')), /[\r\n]/)): %}
+		{% if (isValidCIDR(cnip4, 4)): %}
 		{{ cnip4 }},
+		{% endif %}
 		{% endfor %}
 	}
 }
@@ -193,7 +195,9 @@ set homeproxy_mainland_addr_v6 {
 	auto-merge
 	elements = {
 		{% for (let cnip6 in split(trim(readfile(resources_dir + '/china_ip6.txt')), /[\r\n]/)): %}
+		{% if (isValidCIDR(cnip6, 6)): %}
 		{{ cnip6 }},
+		{% endif %}
 		{% endfor %}
 	}
 }
