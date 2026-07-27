@@ -161,6 +161,7 @@ I18N_NAME="luci-i18n-homeproxy-zh-cn"
 I18N_DIR="$TEMP_DIR/$I18N_NAME"
 mkdir -p "$I18N_DIR/usr/lib/lua/luci/i18n/"
 cp "$TEMP_PKG_DIR/usr/lib/lua/luci/i18n/homeproxy.zh-cn.lmo" "$I18N_DIR/usr/lib/lua/luci/i18n/"
+rm -f "$TEMP_PKG_DIR/usr/lib/lua/luci/i18n/homeproxy.zh-cn.lmo"
 
 if [ "$PKG_MGR" == "apk" ]; then
 	find "$I18N_DIR" -type f,l -printf '/%P\n' | sort > "$TEMP_DIR/i18n.list"
