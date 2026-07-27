@@ -40,13 +40,16 @@ check_list_update() {
 	if [ -n "$github_token" ]; then
 		github_header_file="$RUN_DIR/.gh_header_${listtype}"
 		printf 'Authorization: Bearer %s\n' "$github_token" > "$github_header_file"
+		# Ensure cleanup on signal/exit even if wget is interrupted
+		trap "[ -n \"$github_header_file\" ] && rm -f \"$github_header_file\"" EXIT INT TERM
 	fi
 
 	local list_info="$($wget ${github_header_file:+--header-file=$github_header_file} -O- "https://api.github.com/repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
 	local wget_exit=$?
 
-	# Clean up header file immediately
+	# Clean up header file immediately (normal path), trap covers signal path
 	[ -n "$github_header_file" ] && rm -f "$github_header_file"
+	trap - EXIT INT TERM
 
 	if [ $wget_exit -ne 0 ]; then
 		log "[$(to_upper "$listtype")] Failed to fetch version info (wget exit $wget_exit)."
