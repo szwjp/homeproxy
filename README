@@ -20,3 +20,13 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 原脚本上游更新源部分分流规则更新不及时，导致分流错误。替换活跃规则集更新源
 <img width="1190" height="148" alt="image" src="https://github.com/user-attachments/assets/476ccfc8-33da-40a7-8e3a-91502c5c427c" />
 
+### init 脚本修复与性能优化（`root/etc/init.d/homeproxy`）
+
+- **重定向语法修复**：`2>\&1` 转义错误导致 stderr 写入名为 `&1` 的文件，修正为 `2>&1`
+- **DNS 规则累积修复**：`redirect-dns.conf` 由 `>>` 改为 `>`，避免重启后规则重复叠加
+- **nft 批量化**：stop 时 50 次 nft 进程 fork 合并为单次 `nft -f -` 调用，降低嵌入式设备开销
+- **chown 精确化**：`chown -R` 整目录改为仅匹配 sing-box 相关文件，避免遍历无关文件
+- **内核检测去重**：两处 `uname -r | grep` 合并为一次变量缓存
+- **文件截断简化**：`echo 2>"/dev/null" > file` 替换为 `: > file`
+- **stop 日志恢复**：fw4 reload 失败时保留警告日志，避免故障无迹可查
+
