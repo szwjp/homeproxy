@@ -139,7 +139,6 @@ jobs:
           body: |
             Automatically built on ${{ github.run_id }}.
             Commit: ${{ github.sha }}
-          prerelease: true
           files: |
             .github/luci-app-homeproxy_*.apk
             .github/luci-app-homeproxy_*.ipk
