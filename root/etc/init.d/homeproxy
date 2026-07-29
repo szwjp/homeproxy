@@ -51,6 +51,10 @@ start_service() {
 
 	mkdir -p "$RUN_DIR"
 
+	# QUIC-GO GSO is broken on kernel 6.6 currently
+	local disable_gso=0
+	uname -r | grep -Eq "^6\.6" && disable_gso=1
+
 	if [ "$outbound_node" != "nil" ]; then
 		# Generate/Validate client config
 		ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
@@ -81,7 +85,7 @@ start_service() {
 		echo -e "conf-dir=$DNSMASQ_DIR" > "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf"
 		case "$routing_mode" in
 		"bypass_mainland_china"|"custom"|"global")
-			cat <<-EOF >> "$DNSMASQ_DIR/redirect-dns.conf"
+			cat <<-EOF > "$DNSMASQ_DIR/redirect-dns.conf"
 				no-poll
 				no-resolv
 				server=127.0.0.1#$dns_port
@@ -105,7 +109,7 @@ start_service() {
 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
 				"$HP_DIR/resources/proxy_list.txt" > "$DNSMASQ_DIR/proxy_list.conf"
 		fi
-		/etc/init.d/dnsmasq restart >"/dev/null" 2>\&1
+		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
 
 		# Setup routing table
 		local table_mark
@@ -152,8 +156,7 @@ start_service() {
 		procd_set_param command "$PROG"
 		procd_append_param command run --config "$RUN_DIR/sing-box-c.json"
 
-		# QUIC-GO GSO is broken on kernel 6.6 currently
-		uname -r | grep -Eq "^6\.6" && procd_set_param env "QUIC_GO_DISABLE_GSO"="true"
+		[ "$disable_gso" -eq "1" ] && procd_set_param env "QUIC_GO_DISABLE_GSO"="true"
 
 		if [ -x "/sbin/ujail" ] && [ "$routing_mode" != "custom" ] && ! grep -Eq '"type": "(wireguard|tun)"' "$RUN_DIR/sing-box-c.json"; then
 			procd_add_jail "sing-box-c" log procfs
@@ -196,8 +199,7 @@ start_service() {
 		procd_set_param command "$PROG"
 		procd_append_param command run --config "$RUN_DIR/sing-box-s.json"
 
-		# QUIC-GO GSO is broken on kernel 6.6 currently
-		uname -r | grep -Eq "^6\.6" && procd_set_param env "QUIC_GO_DISABLE_GSO"="true"
+		[ "$disable_gso" -eq "1" ] && procd_set_param env "QUIC_GO_DISABLE_GSO"="true"
 
 		if [ -x "/sbin/ujail" ]; then
 			procd_add_jail "sing-box-s" log procfs
@@ -246,12 +248,12 @@ start_service() {
 	fi
 
 	# Update permissions for ujail
-	chown -R sing-box:sing-box "$RUN_DIR"
+	chown sing-box:sing-box "$RUN_DIR"/sing-box-*.json "$RUN_DIR"/sing-box-*.log "$RUN_DIR"/cache.db 2>"/dev/null"
 
 	# Setup firewall
-	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>/dev/null || log "Error: firewall pre-script failed."
+	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>"/dev/null" || log "Error: firewall pre-script failed."
 	if [ "$outbound_node" != "nil" ]; then
-		utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft" 2>/dev/null || log "Error: firewall post-script failed."
+		utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft" 2>"/dev/null" || log "Error: firewall post-script failed."
 	fi
 	fw4 reload >"/dev/null" 2>&1 || log "Error: fw4 reload failed."
 
@@ -285,29 +287,62 @@ stop_service() {
 	ip -6 rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"
 
 	# Nftables rules
-	for i in "homeproxy_dstnat_redir" "homeproxy_output_redir" \
-		 "homeproxy_redirect" "homeproxy_redirect_proxy" \
-		 "homeproxy_redirect_proxy_port" "homeproxy_redirect_lanac" \
-		 "homeproxy_mangle_prerouting" "homeproxy_mangle_output" \
-		 "homeproxy_mangle_tproxy" "homeproxy_mangle_tproxy_port" \
-		 "homeproxy_mangle_tproxy_lanac" "homeproxy_mangle_mark" \
-		 "homeproxy_mangle_tun" "homeproxy_mangle_tun_mark"; do
-		nft flush chain inet fw4 "$i"
-		nft delete chain inet fw4 "$i"
-	done 2>"/dev/null"
-	for i in "homeproxy_local_addr_v4" "homeproxy_local_addr_v6" \
-		 "homeproxy_gfw_list_v4" "homeproxy_gfw_list_v6" \
-		 "homeproxy_mainland_addr_v4" "homeproxy_mainland_addr_v6" \
-		 "homeproxy_wan_proxy_addr_v4" "homeproxy_wan_proxy_addr_v6" \
-		 "homeproxy_wan_direct_addr_v4" "homeproxy_wan_direct_addr_v6" \
-		 "homeproxy_routing_port"; do
-		nft flush set inet fw4 "$i"
-		nft delete set inet fw4 "$i"
-	done 2>"/dev/null"
-	echo 2>"/dev/null" > "$RUN_DIR/fw4_forward.nft"
-	echo 2>"/dev/null" > "$RUN_DIR/fw4_input.nft"
-	echo 2>"/dev/null" > "$RUN_DIR/fw4_post.nft"
-	fw4 reload >"/dev/null" 2>&1
+	nft -f - 2>"/dev/null" <<-EOF
+		flush chain inet fw4 homeproxy_dstnat_redir
+		delete chain inet fw4 homeproxy_dstnat_redir
+		flush chain inet fw4 homeproxy_output_redir
+		delete chain inet fw4 homeproxy_output_redir
+		flush chain inet fw4 homeproxy_redirect
+		delete chain inet fw4 homeproxy_redirect
+		flush chain inet fw4 homeproxy_redirect_proxy
+		delete chain inet fw4 homeproxy_redirect_proxy
+		flush chain inet fw4 homeproxy_redirect_proxy_port
+		delete chain inet fw4 homeproxy_redirect_proxy_port
+		flush chain inet fw4 homeproxy_redirect_lanac
+		delete chain inet fw4 homeproxy_redirect_lanac
+		flush chain inet fw4 homeproxy_mangle_prerouting
+		delete chain inet fw4 homeproxy_mangle_prerouting
+		flush chain inet fw4 homeproxy_mangle_output
+		delete chain inet fw4 homeproxy_mangle_output
+		flush chain inet fw4 homeproxy_mangle_tproxy
+		delete chain inet fw4 homeproxy_mangle_tproxy
+		flush chain inet fw4 homeproxy_mangle_tproxy_port
+		delete chain inet fw4 homeproxy_mangle_tproxy_port
+		flush chain inet fw4 homeproxy_mangle_tproxy_lanac
+		delete chain inet fw4 homeproxy_mangle_tproxy_lanac
+		flush chain inet fw4 homeproxy_mangle_mark
+		delete chain inet fw4 homeproxy_mangle_mark
+		flush chain inet fw4 homeproxy_mangle_tun
+		delete chain inet fw4 homeproxy_mangle_tun
+		flush chain inet fw4 homeproxy_mangle_tun_mark
+		delete chain inet fw4 homeproxy_mangle_tun_mark
+		flush set inet fw4 homeproxy_local_addr_v4
+		delete set inet fw4 homeproxy_local_addr_v4
+		flush set inet fw4 homeproxy_local_addr_v6
+		delete set inet fw4 homeproxy_local_addr_v6
+		flush set inet fw4 homeproxy_gfw_list_v4
+		delete set inet fw4 homeproxy_gfw_list_v4
+		flush set inet fw4 homeproxy_gfw_list_v6
+		delete set inet fw4 homeproxy_gfw_list_v6
+		flush set inet fw4 homeproxy_mainland_addr_v4
+		delete set inet fw4 homeproxy_mainland_addr_v4
+		flush set inet fw4 homeproxy_mainland_addr_v6
+		delete set inet fw4 homeproxy_mainland_addr_v6
+		flush set inet fw4 homeproxy_wan_proxy_addr_v4
+		delete set inet fw4 homeproxy_wan_proxy_addr_v4
+		flush set inet fw4 homeproxy_wan_proxy_addr_v6
+		delete set inet fw4 homeproxy_wan_proxy_addr_v6
+		flush set inet fw4 homeproxy_wan_direct_addr_v4
+		delete set inet fw4 homeproxy_wan_direct_addr_v4
+		flush set inet fw4 homeproxy_wan_direct_addr_v6
+		delete set inet fw4 homeproxy_wan_direct_addr_v6
+		flush set inet fw4 homeproxy_routing_port
+		delete set inet fw4 homeproxy_routing_port
+	EOF
+	: > "$RUN_DIR/fw4_forward.nft"
+	: > "$RUN_DIR/fw4_input.nft"
+	: > "$RUN_DIR/fw4_post.nft"
+	fw4 reload >"/dev/null" 2>&1 || log "Warning: fw4 reload failed during stop."
 
 	# Remove DNS hijack
 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
