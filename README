@@ -2,31 +2,43 @@
 
 The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 
-## 修改记录 (Fork Changes)
+## Fork Changes
 
 ### sing-box v1.13.14 兼容性修复
 
-- **sniff 字段迁移**：4 个入站（mixed / redirect / tproxy / tun）中删除已废弃的 `sniff` 和 `sniff_override_destination` 字段（自 sing-box 1.12.0 起已移除），改为在路由规则中启用 `action: sniff`
-- **`default_domain_resolver` 格式修正**：两处 `route.default_domain_resolver` 中删除多余的 `action: 'route'` / `action: 'resolve'` 字段（根据 sing-box 拨号字段文档，`domain_resolver` 不应包含 `action` 字段）
-- **死代码清理**：移除不再使用的 `sniff_override` 变量声明及赋值
+- **sniff 字段迁移** — 4 个入站（mixed / redirect / tproxy / tun）删除已废弃的 `sniff` 和 `sniff_override_destination`（自 1.12.0 移除），改为路由规则 `action: sniff`
+- **`default_domain_resolver` 修正** — 删除多余的 `action` 字段，符合 sing-box 拨号字段规范
+- **死代码清理** — 移除未使用的 `sniff_override` 变量
+
+### 规则集更新源替换
+
+上游默认更新源分流规则更新不及时，已替换为活跃维护的规则集源：
+
+<img width="1190" height="148" alt="ruleset sources" src="https://github.com/user-attachments/assets/476ccfc8-33da-40a7-8e3a-91502c5c427c" />
 
 ### Bug 修复
 
-- **ACME 选项布尔判断**（`generate_server.uc`）：`disable_tls_alpn_challenge` 字段直接使用原始字符串值判断，导致用户设为 `'0'` 时仍为 true；已改用 `strToBool()` 正确处理
-- **路由模式拼写错误**（`update_subscriptions.uc`）：默认路由模式 `bypass_mainalnd_china` 缺少字母 `l`，导致订阅更新脚本在不设置 routing_mode 时使用错误默认值；已修正为 `bypass_mainland_china`
+| 文件 | 问题 | 修复 |
+|------|------|------|
+| `generate_server.uc` | ACME `disable_tls_alpn_challenge` 字符串 `'0'` 被当 true | 改用 `strToBool()` |
+| `update_subscriptions.uc` | 默认路由模式拼写 `bypass_mainalnd_china` | 修正为 `bypass_mainland_china` |
 
-替换sing-box更新源
+### init 脚本修复与性能优化
 
-原脚本上游更新源部分分流规则更新不及时，导致分流错误。替换活跃规则集更新源
-<img width="1190" height="148" alt="image" src="https://github.com/user-attachments/assets/476ccfc8-33da-40a7-8e3a-91502c5c427c" />
+文件：`root/etc/init.d/homeproxy`
 
-### init 脚本修复与性能优化（`root/etc/init.d/homeproxy`）
+| 改动 | 说明 |
+|------|------|
+| 重定向语法修复 | `2>\&1` → `2>&1`，原写法会创建名为 `&1` 的垃圾文件 |
+| DNS 规则累积修复 | `redirect-dns.conf` 由 `>>` 改为 `>`，防止重启后规则叠加 |
+| nft 批量化 | 50 次 nft fork → 单次 `nft -f -`，降低嵌入式设备开销 |
+| chown 精确化 | `chown -R` 整目录 → 仅匹配 sing-box 相关文件 |
+| 内核检测去重 | 两处 `uname -r \| grep` → 一次变量缓存 |
+| 文件截断简化 | `echo 2>"/dev/null" > file` → `: > file` |
+| stop 日志恢复 | fw4 reload 失败时保留警告日志 |
 
-- **重定向语法修复**：`2>\&1` 转义错误导致 stderr 写入名为 `&1` 的文件，修正为 `2>&1`
-- **DNS 规则累积修复**：`redirect-dns.conf` 由 `>>` 改为 `>`，避免重启后规则重复叠加
-- **nft 批量化**：stop 时 50 次 nft 进程 fork 合并为单次 `nft -f -` 调用，降低嵌入式设备开销
-- **chown 精确化**：`chown -R` 整目录改为仅匹配 sing-box 相关文件，避免遍历无关文件
-- **内核检测去重**：两处 `uname -r | grep` 合并为一次变量缓存
-- **文件截断简化**：`echo 2>"/dev/null" > file` 替换为 `: > file`
-- **stop 日志恢复**：fw4 reload 失败时保留警告日志，避免故障无迹可查
+### CI/CD 优化
 
+- 产物发布改为固定 tag `luci-app-homeproxy`，覆盖式更新
+- 添加 concurrency 防止重叠编译
+- 发布前自动清理旧 assets
