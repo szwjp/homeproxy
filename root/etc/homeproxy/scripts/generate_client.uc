@@ -809,6 +809,14 @@ if (!isEmpty(main_node)) {
 			outbound: 'direct-out'
 		});
 
+	/* Bypass CN traffic */
+	if (routing_mode === 'bypass_mainland_china')
+		push(config.route.rules, {
+			rule_set: 'geoip-cn',
+			action: 'route',
+			outbound: 'direct-out'
+		});
+
 	/* Main UDP out */
 	if (dedicated_udp_node)
 		push(config.route.rules, {
