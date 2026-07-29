@@ -455,13 +455,11 @@ if (!isEmpty(main_node)) {
 			server: (routing_mode === 'bypass_mainland_china') ? 'china-dns' : 'default-dns'
 		});
 
-	/* Filter out SVCB/HTTPS queries for "exquisite" Apple devices */
-	if (routing_mode === 'gfwlist' || length(proxy_domain_list))
-		push(config.dns.rules, {
-			rule_set: (routing_mode !== 'gfwlist') ? 'proxy-domain' : null,
-			query_type: [64, 65],
-			action: 'reject'
-		});
+	/* Reject SVCB/HTTPS queries to avoid proxy DNS timeout on null domains */
+	push(config.dns.rules, {
+		query_type: [64, 65],
+		action: 'reject'
+	});
 
 	if (routing_mode === 'bypass_mainland_china') {
 		push(config.dns.servers, {
