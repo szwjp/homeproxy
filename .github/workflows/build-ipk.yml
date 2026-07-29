@@ -40,6 +40,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-ipk
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -109,6 +113,22 @@ jobs:
         with:
           name: homeproxy-packages
           path: .github/*.{apk,ipk}
+
+      - name: Cleanup old release assets
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/luci-app-homeproxy" | jq -r '.id') || true
+          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
+            ASSETS=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" | jq -r '.[].id')
+            for asset_id in $ASSETS; do
+              curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id" || true
+            done
+          fi
 
       - name: Publish to Latest Build Release
         uses: softprops/action-gh-release@v2.2.1
