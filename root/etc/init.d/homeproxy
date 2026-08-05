@@ -27,6 +27,13 @@ log() {
 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
 }
 
+# fw4 reload rebuilds the whole ruleset and wipes miniupnpd's dynamic NAT
+# rules; restart it so mappings are re-added from its lease file.
+restore_upnp_mappings() {
+	[ -x /etc/init.d/miniupnpd ] && /etc/init.d/miniupnpd enabled && /etc/init.d/miniupnpd running \
+		&& /etc/init.d/miniupnpd restart >"/dev/null" 2>&1
+}
+
 start_service() {
 	config_load "$CONF"
 
@@ -256,6 +263,7 @@ start_service() {
 		utpl -S "$HP_DIR/scripts/firewall_post.ut" > "$RUN_DIR/fw4_post.nft" 2>"/dev/null" || log "Error: firewall post-script failed."
 	fi
 	fw4 reload >"/dev/null" 2>&1 || log "Error: fw4 reload failed."
+	restore_upnp_mappings
 
 	log "sing-box $(sing-box version -n 2>/dev/null || echo "unknown") started."
 }
@@ -343,6 +351,7 @@ stop_service() {
 	: > "$RUN_DIR/fw4_input.nft"
 	: > "$RUN_DIR/fw4_post.nft"
 	fw4 reload >"/dev/null" 2>&1 || log "Warning: fw4 reload failed during stop."
+	restore_upnp_mappings
 
 	# Remove DNS hijack
 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
