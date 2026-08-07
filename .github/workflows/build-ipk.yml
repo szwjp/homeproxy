@@ -100,8 +100,8 @@ jobs:
       - name: Build ipk file
         run: |
           pushd .github
-          fakeroot bash build-ipk.sh apk "${{ github.event_name }}"
-          fakeroot bash build-ipk.sh ipk "${{ github.event_name }}"
+          fakeroot bash build-ipk.sh apk
+          fakeroot bash build-ipk.sh ipk
           popd
 
       - name: Publishing packages to GitHub Artifacts
