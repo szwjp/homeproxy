@@ -7,7 +7,6 @@ set -o errexit
 set -o pipefail
 
 PKG_MGR="${1:-apk}"
-RELEASE_TYPE="${2:-snapshot}"
 
 export PKG_SOURCE_DATE_EPOCH="$(date "+%s")"
 export SOURCE_DATE_EPOCH="$PKG_SOURCE_DATE_EPOCH"
@@ -20,8 +19,12 @@ function get_mk_value() {
 }
 
 PKG_NAME="$(get_mk_value "PKG_NAME")"
-if [ "$RELEASE_TYPE" == "release" ]; then
-	PKG_VERSION="$(get_mk_value "PKG_VERSION")"
+# Prefer PKG_VERSION/PKG_RELEASE from Makefile, fall back to a
+# snapshot-style timestamp version when they are not defined
+PKG_VERSION="$(get_mk_value "PKG_VERSION")"
+PKG_RELEASE="$(get_mk_value "PKG_RELEASE")"
+if [ -n "$PKG_VERSION" ] && [ -n "$PKG_RELEASE" ]; then
+	PKG_VERSION="$PKG_VERSION-r$PKG_RELEASE"
 else
 	PKG_VERSION="$PKG_SOURCE_DATE_EPOCH~$(git rev-parse --short HEAD)-r99"
 fi
