@@ -157,12 +157,20 @@ jobs:
         run: |
           set -eo pipefail
           mkdir -p deps && cd deps
-          REPO="https://downloads.immortalwrt.org/releases/25.12.1/packages/x86_64/packages"
+          # 依赖可能位于 packages 或 luci 源，逐个尝试
           for p in sing-box firewall4 ucode-mod-digest; do
-            f="$(curl -fsSL "$REPO/" | grep -oE "${p}-[0-9][^\"<>]*\.apk" | head -n1)"
+            f=""
+            for REPO in \
+              "https://downloads.immortalwrt.org/releases/25.12.1/packages/x86_64/packages" \
+              "https://downloads.immortalwrt.org/releases/25.12.1/packages/x86_64/luci"; do
+              f="$(curl -fsSL "$REPO/" | grep -oE "${p}-[0-9][^"<>]*\.apk" | head -n1)"
+              [ -n "$f" ] && break
+            done
             [ -n "$f" ] || { echo "未在仓库找到 $p"; exit 1; }
             echo "fetching $f"
             curl -fsSLO "$REPO/$f"
+            # 改名为固定名，避免同名前缀包被 glob 误匹配
+            mv "$f" "${p}.apk"
           done
           ls -l
 
@@ -181,9 +189,9 @@ jobs:
 
           extract_list "$(ls pkg/luci-app-homeproxy-*.apk)" ours-app.txt
           extract_list "$(ls pkg/luci-i18n-homeproxy-zh-cn-*.apk)" ours-i18n.txt
-          extract_list "$(ls deps/sing-box-*.apk)" dep0.txt
-          extract_list "$(ls deps/firewall4-*.apk)" dep1.txt
-          extract_list "$(ls deps/ucode-mod-digest-*.apk)" dep2.txt
+          extract_list deps/sing-box.apk dep0.txt
+          extract_list deps/firewall4.apk dep1.txt
+          extract_list deps/ucode-mod-digest.apk dep2.txt
 
           echo "=== 本包文件数 ==="; wc -l ours-app.txt ours-i18n.txt
                     echo "=== 依赖文件数 ==="; wc -l dep*.txt
