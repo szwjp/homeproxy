@@ -24,21 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source tree
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0   # build-pkg.sh 的 git describe/rev-parse 兜底需要完整历史
 
       # ---------- 缓存已编译的 apk 可执行文件，命中则跳过整个 checkout+meson+ninja ----------
       - name: Cache apk-tools binary
         id: cache-apk-tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /usr/local/bin/apk
           key: apk-tools-${{ env.APK_TOOLS_REF }}-${{ runner.os }}
 
       - name: Checkout apk-tools
         if: steps.cache-apk-tools.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'alpinelinux/apk-tools'
           path: 'apk-tools'
@@ -46,7 +46,7 @@ jobs:
           ref: ${{ env.APK_TOOLS_REF }}
 
       - name: Checkout po2lmo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'openwrt/luci'
           path: 'po2lmo'
@@ -109,7 +109,7 @@ jobs:
           printf '生成的包:\n%s\n' "${apks[@]}" "${ipks[@]}"
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: homeproxy-packages
           include-hidden-files: true
@@ -142,7 +142,7 @@ jobs:
 
       - name: Publish to Latest Build Release
         if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.2
         with:
           tag_name: luci-app-homeproxy
           name: HomeProxy Latest Build
