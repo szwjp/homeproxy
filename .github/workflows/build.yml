@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -14,20 +14,36 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # 锁定 apk-tools 的具体 commit，避免上游改打包格式/参数导致 CI 无预警地坏掉。
+  # 升级这个 SHA 时，下面的缓存 key 会自动失效并重新编译一次。
+  APK_TOOLS_REF: 'b5a31c0d865342ad80be10d68f1bb3d3ad9b0866'
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source tree
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # build-pkg.sh 的 git describe/rev-parse 兜底需要完整历史
+
+      # ---------- 缓存已编译的 apk 可执行文件，命中则跳过整个 checkout+meson+ninja ----------
+      - name: Cache apk-tools binary
+        id: cache-apk-tools
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/apk
+          key: apk-tools-${{ env.APK_TOOLS_REF }}-${{ runner.os }}
 
       - name: Checkout apk-tools
+        if: steps.cache-apk-tools.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: 'alpinelinux/apk-tools'
           path: 'apk-tools'
           fetch-depth: 0
-          ref: 'b5a31c0d865342ad80be10d68f1bb3d3ad9b0866'
+          ref: ${{ env.APK_TOOLS_REF }}
 
       - name: Checkout po2lmo
         uses: actions/checkout@v4
@@ -43,22 +59,26 @@ jobs:
           sudo -E apt-get update -qq
           sudo -E apt-get install -y build-essential curl fakeroot libssl-dev lua5.1 meson ninja-build
 
-          pushd apk-tools
-          meson setup build \
-            -Db_lto=true \
-            -Dcompressed-help=false \
-            -Ddocs=disabled \
-            -Dhelp=enabled \
-            -Dlua_version=5.1 \
-            -Ddefault_library=static \
-            -Durl_backend=wget \
-            -Dzstd=false \
-            -Dpython=disabled \
-            -Dtests=disabled \
-            -Dcrypto_backend=openssl
-          ninja -C build
-          sudo -E meson install -C build --strip
-          popd
+          if [ "${{ steps.cache-apk-tools.outputs.cache-hit }}" != "true" ]; then
+            pushd apk-tools
+            meson setup build \
+              -Db_lto=true \
+              -Dcompressed-help=false \
+              -Ddocs=disabled \
+              -Dhelp=enabled \
+              -Dlua_version=5.1 \
+              -Ddefault_library=static \
+              -Durl_backend=wget \
+              -Dzstd=false \
+              -Dpython=disabled \
+              -Dtests=disabled \
+              -Dcrypto_backend=openssl
+            ninja -C build
+            sudo -E meson install -C build --strip
+            popd
+          else
+            echo "apk-tools 缓存命中，跳过编译"
+          fi
 
           pushd po2lmo/modules/luci-base/src
           make po2lmo
@@ -68,11 +88,25 @@ jobs:
           curl -fLO "https://raw.githubusercontent.com/openwrt/openwrt/master/scripts/ipkg-build"
           sudo install -m0755 ipkg-build /usr/local/bin/ipkg-build
 
+      - name: Verify toolchain
+        run: |
+          command -v apk >/dev/null || { echo "::error::apk 未正确安装"; exit 1; }
+          command -v po2lmo >/dev/null || { echo "::error::po2lmo 未正确安装"; exit 1; }
+          command -v ipkg-build >/dev/null || { echo "::error::ipkg-build 未正确安装"; exit 1; }
+          apk --version
+
       - name: Build packages (apk + ipk)
         run: |
-          fakeroot bash .github/build-pkg.sh apk "${{ github.run_number }}"
-          fakeroot bash .github/build-pkg.sh ipk "${{ github.run_number }}"
-          ls -l .github/*.apk .github/*.ipk
+          fakeroot bash .github/build-pkg.sh apk "${{ github.event_name }}"
+          fakeroot bash .github/build-pkg.sh ipk "${{ github.event_name }}"
+          shopt -s nullglob
+          apks=(.github/*.apk)
+          ipks=(.github/*.ipk)
+          if [ "${#apks[@]}" -eq 0 ] || [ "${#ipks[@]}" -eq 0 ]; then
+            echo "::error::未生成预期的 apk/ipk 文件"
+            exit 1
+          fi
+          printf '生成的包:\n%s\n' "${apks[@]}" "${ipks[@]}"
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
@@ -88,15 +122,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
+          # 首次运行（或 release 被删）时该 tag 的 release 不存在，curl 404 属预期：
+          # 用 `|| RELEASE_ID=""` 兜底，而不是让整个步骤失败（否则 publish 永远不会执行）。
           RELEASE_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/luci-app-homeproxy" | jq -r '.id') || true
-          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/luci-app-homeproxy" | jq -r '.id' 2>/dev/null) || RELEASE_ID=""
+          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
             ASSETS=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" | jq -r '.[].id')
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" | jq -r '.[].id') || ASSETS=""
             for asset_id in $ASSETS; do
-              curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id" || true
+              if ! curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id"; then
+                echo "::warning::删除旧 asset $asset_id 失败，可能已被并发任务清理，继续执行"
+              fi
             done
+          else
+            echo "尚无 'luci-app-homeproxy' latest-build release，跳过清理"
           fi
 
       - name: Publish to Latest Build Release
@@ -111,6 +152,6 @@ jobs:
           files: |
             .github/luci-app-homeproxy-*.apk
             .github/luci-app-homeproxy-*.ipk
-            .github/luci-i18n-homeproxy-zh-cn-*.apk
-            .github/luci-i18n-homeproxy-zh-cn-*.ipk
+            .github/luci-i18n-homeproxy-*.apk
+            .github/luci-i18n-homeproxy-*.ipk
           token: ${{ github.token }}
