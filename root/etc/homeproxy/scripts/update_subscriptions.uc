@@ -516,7 +516,7 @@ function main() {
 			const label = config.label;
 			config.label = null;
 			const confHash = md5(sprintf('%J', config)),
-			      nameHash = md5(label);
+			      nameHash = md5(groupHash + label);
 			config.label = label;
 
 			if (filter_check(config.label))
@@ -586,7 +586,7 @@ function main() {
 			if (node.isExisting)
 				return null;
 
-			const nameHash = md5(node.label);
+			const nameHash = md5(node.grouphash + node.label);
 			uci.set(uciconfig, nameHash, 'node');
 			map(keys(node), (v) => uci.set(uciconfig, nameHash, v, node[v]));
 

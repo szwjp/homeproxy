@@ -39,7 +39,7 @@ check_list_update() {
 	local github_header_file=""
 	if [ -n "$github_token" ]; then
 		github_header_file="$RUN_DIR/.gh_header_${listtype}"
-		printf 'Authorization: Bearer %s\n' "$github_token" > "$github_header_file"
+		( umask 077; printf 'Authorization: Bearer %s\n' "$github_token" > "$github_header_file" )
 		# Ensure cleanup on signal/exit even if wget is interrupted
 		trap "[ -n \"$github_header_file\" ] && rm -f \"$github_header_file\"" EXIT INT TERM
 	fi
@@ -56,7 +56,7 @@ check_list_update() {
 		return 1
 	fi
 	local list_sha="$(echo -e "$list_info" | jsonfilter -qe "@[0].sha")"
-	local list_ver="$(echo -e "$list_info" | jsonfilter -qe "@[0].commit.message" | grep -Eo "[0-9-]+" | tr -d '-')"
+	local list_ver="$list_sha"
 	if [ -z "$list_sha" ] || [ -z "$list_ver" ]; then
 		log "[$(to_upper "$listtype")] Failed to get the latest version, please retry later."
 		return 1

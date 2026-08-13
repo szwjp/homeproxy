@@ -94,7 +94,11 @@ export function strToInt(str) {
 };
 
 export function strToTime(str) {
-	return !isEmpty(str) ? (str + 's') : null;
+	if (isEmpty(str))
+		return null;
+
+	/* Preserve values that already carry a time unit (e.g. "30s", "1m") */
+	return match(str, /[a-zA-Z]$/) ? str : (str + 's');
 };
 
 export function removeBlankAttrs(res) {
@@ -164,9 +168,40 @@ export function isValidCIDR(addr, family) {
 		if (prefix && (int(prefix) < 0 || int(prefix) > 32))
 			return false;
 	} else if (family === 6) {
-		/* Basic IPv6 format check: allow compressed notation */
+		/* Only hex digits and colons */
 		if (!match(ip, /^[0-9a-fA-F:]+$/))
 			return false;
+
+		/* At most one "::" */
+		if (match(ip, /::.*::/))
+			return false;
+
+		/* Validate group structure */
+		const dcolon = index(ip, '::');
+		if (dcolon === -1) {
+			/* Uncompressed form: exactly 8 groups of 1-4 hex digits */
+			const groups = split(ip, ':');
+			if (length(groups) !== 8)
+				return false;
+			for (let g in groups)
+				if (!match(g, /^[0-9a-fA-F]{1,4}$/))
+					return false;
+		} else {
+			/* Compressed form: "::" expands to at least one zero group */
+			let count = 0;
+			for (let part in [substr(ip, 0, dcolon), substr(ip, dcolon + 2)]) {
+				if (part === '')
+					continue;
+				for (let g in split(part, ':')) {
+					if (!match(g, /^[0-9a-fA-F]{1,4}$/))
+						return false;
+					count++;
+				}
+			}
+			if (count > 7)
+				return false;
+		}
+
 		if (prefix && (int(prefix) < 0 || int(prefix) > 128))
 			return false;
 	} else {
