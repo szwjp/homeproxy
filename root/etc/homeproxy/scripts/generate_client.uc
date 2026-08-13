@@ -228,8 +228,6 @@ function generate_outbound(node) {
 		password: node.password,
 
 		/* Direct */
-		override_address: node.override_address,
-		override_port: strToInt(node.override_port),
 		proxy_protocol: strToInt(node.proxy_protocol),
 		/* AnyTLS */
 		idle_session_check_interval: strToTime(node.anytls_idle_session_check_interval),
@@ -246,7 +244,7 @@ function generate_outbound(node) {
 		auth: (node.hysteria_auth_type === 'base64') ? node.hysteria_auth_payload : null,
 		auth_str: (node.hysteria_auth_type === 'string') ? node.hysteria_auth_payload : null,
 		recv_window_conn: strToInt(node.hysteria_recv_window_conn),
-		recv_window: strToInt(node.hysteria_revc_window),
+		recv_window: strToInt(node.hysteria_recv_window),
 		disable_mtu_discovery: strToBool(node.hysteria_disable_mtu_discovery),
 		/* Shadowsocks */
 		method: node.shadowsocks_encrypt_method,
@@ -336,6 +334,13 @@ function generate_outbound(node) {
 		udp_fragment: strToBool(node.udp_fragment)
 	};
 
+	/* Migrate legacy direct-node destination override to route-options action (sing-box 1.13) */
+	if (node.type === 'direct' && (!isEmpty(node.override_address) || !isEmpty(node.override_port)))
+		direct_overrides[node['.name']] = {
+			override_address: node.override_address,
+			override_port: strToInt(node.override_port)
+		};
+
 	return outbound;
 }
 
@@ -365,6 +370,20 @@ function get_outbound(cfg) {
 			else
 				return 'cfg-' + node + '-out';
 		}
+	}
+}
+
+function get_direct_override(outbound_selector) {
+	if (type(outbound_selector) === 'array' || isEmpty(outbound_selector))
+		return null;
+
+	switch (outbound_selector) {
+	case 'direct-out':
+	case 'block-out':
+		return null;
+	default:
+		const node = uci.get(uciconfig, outbound_selector, 'node');
+		return (!isEmpty(node) && node !== 'urltest') ? (direct_overrides[node] || null) : null;
 	}
 }
 
@@ -561,7 +580,6 @@ if (!isEmpty(main_node)) {
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
 			rule_set_ip_cidr_accept_empty: strToBool(cfg.rule_set_ip_cidr_accept_empty),
 			invert: strToBool(cfg.invert),
-			outbound: get_outbound(cfg.outbound),
 			action: cfg.action,
 			server: get_resolver(cfg.server),
 			strategy: cfg.domain_strategy,
@@ -638,6 +656,9 @@ if (match(proxy_mode, /tun/))
 
 /* Outbound start */
 config.endpoints = [];
+
+/* Legacy direct-node destination override, keyed by node section name */
+const direct_overrides = {};
 
 /* Default outbounds */
 config.outbounds = [
@@ -816,11 +837,24 @@ if (!isEmpty(main_node)) {
 		});
 
 	/* Main UDP out */
-	if (dedicated_udp_node)
+	if (dedicated_udp_node) {
+		const udp_override = direct_overrides[main_udp_node] || null;
 		push(config.route.rules, {
 			network: 'udp',
 			action: 'route',
-			outbound: 'main-udp-out'
+			outbound: 'main-udp-out',
+			override_address: udp_override ? udp_override.override_address : null,
+			override_port: udp_override ? udp_override.override_port : null
+		});
+	}
+
+	/* Legacy direct-node destination override, emitted as route-options action (sing-box 1.13) */
+	const main_override = direct_overrides[main_node] || null;
+	if (main_override)
+		push(config.route.rules, {
+			action: 'route-options',
+			override_address: main_override.override_address,
+			override_port: main_override.override_port
 		});
 
 	config.route.final = 'main-out';
@@ -891,6 +925,15 @@ if (!isEmpty(main_node)) {
 		if (cfg.enabled !== '1')
 			return null;
 
+		const rule_outbound = get_outbound(cfg.outbound);
+		const rule_direct_override = get_direct_override(cfg.outbound);
+		let rule_override_address = cfg.override_address,
+		    rule_override_port = strToInt(cfg.override_port);
+		if (isEmpty(rule_override_address) && isEmpty(rule_override_port) && rule_direct_override) {
+			rule_override_address = rule_direct_override.override_address;
+			rule_override_port = rule_direct_override.override_port;
+		}
+
 		push(config.route.rules, {
 			ip_version: strToInt(cfg.ip_version),
 			protocol: cfg.protocol,
@@ -915,9 +958,9 @@ if (!isEmpty(main_node)) {
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
 			invert: strToBool(cfg.invert),
 			action: cfg.action,
-			outbound: get_outbound(cfg.outbound),
-			override_address: cfg.override_address,
-			override_port: strToInt(cfg.override_port),
+			outbound: rule_outbound,
+			override_address: rule_override_address,
+			override_port: rule_override_port,
 			udp_disable_domain_unmapping: strToBool(cfg.udp_disable_domain_unmapping),
 			udp_connect: strToBool(cfg.udp_connect),
 			udp_timeout: strToTime(cfg.udp_timeout),
@@ -926,6 +969,15 @@ if (!isEmpty(main_node)) {
 			tls_record_fragment: strToBool(cfg.tls_record_fragment)
 		});
 	});
+
+	/* Legacy direct-node destination override, emitted as route-options action (sing-box 1.13) */
+	const final_override = get_direct_override(default_outbound);
+	if (final_override)
+		push(config.route.rules, {
+			action: 'route-options',
+			override_address: final_override.override_address,
+			override_port: final_override.override_port
+		});
 
 	config.route.final = get_outbound(default_outbound);
 

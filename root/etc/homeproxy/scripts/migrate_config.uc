@@ -221,6 +221,10 @@ uci.foreach(uciconfig, ucinode, (cfg) => {
 	/* wireguard_gso was deprecated in sb 1.11 */
 	if (!isEmpty(cfg.wireguard_gso))
 		uci.delete(uciconfig, cfg['.name'], 'wireguard_gso');
+
+	/* hysteria_revc_window was a typo, renamed to hysteria_recv_window */
+	if (!isEmpty(cfg.hysteria_revc_window))
+		uci.rename(uciconfig, cfg['.name'], 'hysteria_revc_window', 'hysteria_recv_window');
 });
 
 /* routing rules options */
