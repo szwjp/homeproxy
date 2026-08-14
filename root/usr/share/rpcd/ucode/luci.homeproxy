@@ -234,7 +234,10 @@ const methods = {
 	resources_get_version: {
 		args: { type: 'type' },
 		call: function(req) {
-			const version = trim(readfile(`${HP_DIR}/resources/${req.args?.type}.ver`));
+			let version = trim(readfile(`${HP_DIR}/resources/${req.args?.type}.ver`));
+			const fields = version ? match(version, /^(\S+) (\S+)$/) : null;
+			if (fields)
+				version = fields[1];
 			return { version: version, error: error() };
 		}
 	},

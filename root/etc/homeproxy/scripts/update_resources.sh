@@ -56,19 +56,23 @@ check_list_update() {
 		return 1
 	fi
 	local list_sha="$(echo -e "$list_info" | jsonfilter -qe "@[0].sha")"
-	local list_ver="$list_sha"
-	if [ -z "$list_sha" ] || [ -z "$list_ver" ]; then
+	local list_date="$(echo -e "$list_info" | jsonfilter -qe "@[0].commit.committer.date" | cut -d 'T' -f1)"
+	if [ -z "$list_sha" ]; then
 		log "[$(to_upper "$listtype")] Failed to get the latest version, please retry later."
 		return 1
 	fi
+	# .ver format: "<date> <sha>"; sha for update comparison, date for display
+	local list_ver="${list_date:+$list_date }$list_sha"
 
-	local local_list_ver="$(cat "$RESOURCES_DIR/$listtype.ver" 2>"/dev/null" || echo "NOT FOUND")"
-	if [ "$local_list_ver" = "$list_ver" ]; then
-		log "[$(to_upper "$listtype")] Current version: $list_ver."
+	local local_list_ver="$(cat "$RESOURCES_DIR/$listtype.ver" 2>"/dev/null" || echo "NOT_FOUND")"
+	local local_list_sha="${local_list_ver##* }"
+	local local_list_disp="${local_list_ver%% *}"
+	if [ "$local_list_sha" = "$list_sha" ]; then
+		log "[$(to_upper "$listtype")] Current version: $local_list_disp."
 		log "[$(to_upper "$listtype")] You're already at the latest version."
 		return 3
 	else
-		log "[$(to_upper "$listtype")] Local version: $local_list_ver, latest version: $list_ver."
+		log "[$(to_upper "$listtype")] Local version: $local_list_disp, latest version: ${list_ver%% *}."
 	fi
 
 	if ! $wget "https://fastly.jsdelivr.net/gh/$listrepo@$list_sha/$listname" -O "$RUN_DIR/$listname" || [ ! -s "$RUN_DIR/$listname" ]; then

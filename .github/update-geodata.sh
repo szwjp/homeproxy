@@ -13,19 +13,23 @@ check_list_update() {
 
 	local list_info="$(gh api "repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
 	local list_sha="$(echo -e "$list_info" | jq -r ".[].sha")"
-	local list_ver="$(echo -e "$list_info" | jq -r ".[].commit.message" | grep -Eo "[0-9-]+" | tr -d '-')"
-	if [ -z "$list_sha" ] || [ -z "$list_ver" ]; then
+	local list_date="$(echo -e "$list_info" | jq -r ".[].commit.committer.date" | cut -d 'T' -f1)"
+	if [ -z "$list_sha" ]; then
 		echo -e "[${listtype^^}] Failed to get the latest version, please retry later."
 		return 1
 	fi
+	# .ver format: "<date> <sha>"; sha for update comparison, date for display
+	local list_ver="${list_date:+$list_date }$list_sha"
 
-	local local_list_ver="$(cat "$RESOURCES_DIR/$listtype.ver" 2>"/dev/null" || echo "NOT FOUND")"
-	if [ "$local_list_ver" = "$list_ver" ]; then
-		echo -e "[${listtype^^}] Current version: $list_ver."
+	local local_list_ver="$(cat "$RESOURCES_DIR/$listtype.ver" 2>"/dev/null" || echo "NOT_FOUND")"
+	local local_list_sha="${local_list_ver##* }"
+	local local_list_disp="${local_list_ver%% *}"
+	if [ "$local_list_sha" = "$list_sha" ]; then
+		echo -e "[${listtype^^}] Current version: $local_list_disp."
 		echo -e "[${listtype^^}] You're already at the latest version."
 		return 3
 	else
-		echo -e "[${listtype^^}] Local version: $local_list_ver, latest version: $list_ver."
+		echo -e "[${listtype^^}] Local version: $local_list_disp, latest version: ${list_ver%% *}."
 	fi
 
 	if ! curl -fsSL "https://raw.githubusercontent.com/$listrepo/$list_sha/$listname" -o "$TEMP_DIR/$listname" || [ ! -s "$TEMP_DIR/$listname" ]; then
