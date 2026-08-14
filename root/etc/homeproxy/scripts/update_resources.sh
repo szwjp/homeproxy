@@ -68,7 +68,10 @@ check_list_update() {
 	local local_list_sha="${local_list_ver##* }"
 	local local_list_disp="${local_list_ver%% *}"
 	if [ "$local_list_sha" = "$list_sha" ]; then
-		log "[$(to_upper "$listtype")] Current version: $local_list_disp."
+		# migrate old single-field .ver to "<date> <sha>"
+		[ "$local_list_ver" = "$local_list_sha" ] && [ -n "$list_date" ] && \
+			echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
+		log "[$(to_upper "$listtype")] Current version: ${list_ver%% *}."
 		log "[$(to_upper "$listtype")] You're already at the latest version."
 		return 3
 	else
