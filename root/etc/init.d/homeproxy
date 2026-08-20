@@ -63,6 +63,20 @@ start_service() {
 	uname -r | grep -Eq "^6\.6" && disable_gso=1
 
 	if [ "$outbound_node" != "nil" ]; then
+		# Wait for WAN to be up: sing-box must download its rule-sets on first
+		# start (cache.db is RAM-backed and empty after a reboot), so starting
+		# before WAN is ready makes it FATAL on every boot. Proceed anyway
+		# after 60s to avoid blocking boot forever if WAN never comes up.
+		local wan_waited=0
+		while ! ifstatus wan 2>"/dev/null" | grep -q '"up": true'; do
+			wan_waited=$((wan_waited + 1))
+			if [ "$wan_waited" -ge 60 ]; then
+				log "WARNING: WAN not up after 60s, starting sing-box anyway."
+				break
+			fi
+			sleep 1
+		done
+
 		# Generate/Validate client config
 		ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
 
@@ -169,7 +183,7 @@ start_service() {
 			procd_add_jail "sing-box-c" log procfs
 			procd_add_jail_mount "$RUN_DIR/sing-box-c.json"
 			procd_add_jail_mount_rw "$RUN_DIR/sing-box-c.log"
-			[ "$routing_mode" != "bypass_mainland_china" ] || procd_add_jail_mount_rw "$RUN_DIR/cache.db"
+			[ "$routing_mode" != "bypass_mainland_china" ] || procd_add_jail_mount_rw "$HP_DIR/cache.db"
 			procd_add_jail_mount "$HP_DIR/certs/"
 			procd_add_jail_mount "/etc/ssl/"
 			procd_add_jail_mount "/etc/localtime"
@@ -239,8 +253,8 @@ start_service() {
 
 	case "$routing_mode" in
 	"bypass_mainland_china")
-		# Prepare cache db
-		[ -e "$RUN_DIR/cache.db" ] || touch "$RUN_DIR/cache.db"
+		# Prepare cache db (persistent on overlay so rule-sets survive reboot)
+		[ -e "$HP_DIR/cache.db" ] || touch "$HP_DIR/cache.db"
 		;;
 	"custom")
 		# Prepare ruleset directory
@@ -255,7 +269,7 @@ start_service() {
 	fi
 
 	# Update permissions for ujail
-	chown sing-box:sing-box "$RUN_DIR"/sing-box-*.json "$RUN_DIR"/sing-box-*.log "$RUN_DIR"/cache.db 2>"/dev/null"
+	chown sing-box:sing-box "$RUN_DIR"/sing-box-*.json "$RUN_DIR"/sing-box-*.log "$HP_DIR"/cache.db 2>"/dev/null"
 
 	# Setup firewall
 	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>"/dev/null" || log "Error: firewall pre-script failed."

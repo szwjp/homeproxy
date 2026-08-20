@@ -42,3 +42,20 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 - 产物发布改为固定 tag `luci-app-homeproxy`，覆盖式更新
 - 添加 concurrency 防止重叠编译
 - 发布前自动清理旧 assets
+
+### DNS 修复：NAPTR 查询超时
+
+sing-box 客户端日志持续报 `dns: exchange failed for ...r.10086.cn IN NAPTR: context deadline exceeded`（中国移动 VoLTE/IMS 域，TTL 仅 37s）。原因：内置 `query_type [64,65]` 拒绝规则只拦 SVCB/HTTPS，不含 NAPTR(35)；查询落入慢路径（china-dns 223.5.5.5 对 NAPTR 有秒级慢首响应，非 CN 域走代理）。
+
+修复：`generate_client.uc` 新增 DNS 规则——NAPTR 查询 + `r.10086.cn` / `10086.cn` / `pub.3gppnetwork.org` 域名**直连 ISP 本地 DNS（`default-dns`）**，实测 29~248ms 稳定返回，不再超时。
+
+### 启动修复：开机规则集下载 FATAL
+
+每次重启 sing-box 必现 `FATAL: initialize rule-set ... no route to internet`。原因：① `cache.db` 在 /tmp（内存盘）重启即清空；② homeproxy 开机约 8 秒即启动，而 PPPoE 拨号需 15-25 秒，规则集下载必然失败。
+
+修复：
+
+- `init.d/homeproxy`：`start_service` 增加**等 WAN 循环**（60 秒上限，WAN 未就绪不启动 sing-box）
+- `generate_client.uc` + `init.d/homeproxy`：**`cache.db` 迁移到持久化的 `/etc/homeproxy/cache.db`**，规则集跨重启保留，开机即使断网也能从缓存启动
+
+验证：真实重启后 FATAL 从每次 1 条降为 **0 条**。

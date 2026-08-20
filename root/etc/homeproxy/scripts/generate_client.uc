@@ -491,6 +491,17 @@ if (!isEmpty(main_node)) {
 			...parse_dnsserver(china_dns_server)
 		});
 
+		/* Route NAPTR (qtype 35) queries for SIP/ENUM domains to the ISP
+		   default-dns directly: china-dns (223.5.5.5) has intermittent
+		   multi-second first responses for NAPTR, causing 'context deadline
+		   exceeded' (e.g. sipgz12.hbq.r.10086.cn) */
+		push(config.dns.rules, {
+			query_type: [35],
+			domain_suffix: ['r.10086.cn', '10086.cn', 'pub.3gppnetwork.org'],
+			action: 'route',
+			server: 'default-dns'
+		});
+
 		if (length(proxy_domain_list))
 			push(config.dns.rules, {
 				rule_set: 'proxy-domain',
@@ -1004,7 +1015,7 @@ if (routing_mode in ['bypass_mainland_china', 'custom']) {
 	config.experimental = {
 		cache_file: {
 			enabled: true,
-			path: RUN_DIR + '/cache.db',
+			path: '/etc/homeproxy/cache.db',
 			store_rdrc: strToBool(cache_file_store_rdrc),
 			rdrc_timeout: strToTime(cache_file_rdrc_timeout),
 		}
