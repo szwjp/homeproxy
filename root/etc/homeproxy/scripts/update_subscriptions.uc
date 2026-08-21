@@ -607,13 +607,19 @@ function main() {
 		if (first_server) {
 			let main_urltest_nodes;
 			if (main_node === 'urltest') {
-				main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes'), (v) => {
+				const old_urltest_nodes = uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [];
+				main_urltest_nodes = filter(old_urltest_nodes, (v) => {
 					if (!uci.get(uciconfig, v)) {
 						log(sprintf('Node %s is gone, removing from urltest list.', v));
 						return false;
 					}
 					return true;
 				});
+				if (length(main_urltest_nodes) !== length(old_urltest_nodes)) {
+					uci.set(uciconfig, ucimain, 'main_urltest_nodes', main_urltest_nodes);
+					uci.commit(uciconfig);
+					need_restart = true;
+				}
 			}
 
 			if ((main_node === 'urltest') ? !length(main_urltest_nodes) : !uci.get(uciconfig, main_node)) {
@@ -627,13 +633,19 @@ function main() {
 			if (!isEmpty(main_udp_node) && main_udp_node !== 'same') {
 				let main_udp_urltest_nodes;
 				if (main_udp_node === 'urltest') {
-					main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes'), (v) => {
+					const old_udp_urltest_nodes = uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [];
+					main_udp_urltest_nodes = filter(old_udp_urltest_nodes, (v) => {
 						if (!uci.get(uciconfig, v)) {
 							log(sprintf('Node %s is gone, removing from urltest list.', v));
 							return false;
 						}
 						return true;
 					});
+					if (length(main_udp_urltest_nodes) !== length(old_udp_urltest_nodes)) {
+						uci.set(uciconfig, ucimain, 'main_udp_urltest_nodes', main_udp_urltest_nodes);
+						uci.commit(uciconfig);
+						need_restart = true;
+					}
 				}
 
 				if ((main_udp_node === 'urltest') ? !length(main_udp_urltest_nodes) : !uci.get(uciconfig, main_udp_node)) {
@@ -653,6 +665,21 @@ function main() {
 			log('No available node, disable tproxy.');
 		}
 	}
+
+	/* Scrub stale urltest member references in custom routing nodes */
+	uci.foreach(uciconfig, 'routing_node', (cfg) => {
+		if (cfg.node !== 'urltest' || isEmpty(cfg.urltest_nodes))
+			return null;
+
+		const cleaned_nodes = filter(cfg.urltest_nodes, (v) => uci.get(uciconfig, v));
+		if (length(cleaned_nodes) !== length(cfg.urltest_nodes)) {
+			uci.set(uciconfig, cfg['.name'], 'urltest_nodes', cleaned_nodes);
+			uci.commit(uciconfig);
+			need_restart = true;
+
+			log(sprintf('Routing node %s: removed gone nodes from urltest list.', cfg['.name']));
+		}
+	});
 
 	if (need_restart) {
 		log('Restarting service...');

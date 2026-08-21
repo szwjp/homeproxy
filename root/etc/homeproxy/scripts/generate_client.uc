@@ -689,7 +689,7 @@ if (!isEmpty(main_node)) {
 	let urltest_nodes = [];
 
 	if (main_node === 'urltest') {
-		const main_urltest_nodes = uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [];
+		const main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
 		const main_urltest_interval = uci.get(uciconfig, ucimain, 'main_urltest_interval');
 		const main_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_urltest_tolerance');
 
@@ -714,7 +714,7 @@ if (!isEmpty(main_node)) {
 	}
 
 	if (main_udp_node === 'urltest') {
-		const main_udp_urltest_nodes = uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [];
+		const main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
 		const main_udp_urltest_interval = uci.get(uciconfig, ucimain, 'main_udp_urltest_interval');
 		const main_udp_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_udp_urltest_tolerance');
 
@@ -740,6 +740,8 @@ if (!isEmpty(main_node)) {
 
 	for (let i in urltest_nodes) {
 		const urltest_node = uci.get_all(uciconfig, i) || {};
+		if (isEmpty(urltest_node))
+			continue;
 		if (urltest_node.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(urltest_node));
 			config.endpoints[length(config.endpoints)-1].tag = 'cfg-' + i + '-out';
@@ -757,17 +759,18 @@ if (!isEmpty(main_node)) {
 			return;
 
 		if (cfg.node === 'urltest') {
+			const cfg_urltest_nodes = filter(cfg.urltest_nodes || [], (k) => uci.get(uciconfig, k));
 			push(config.outbounds, {
 				type: 'urltest',
 				tag: 'cfg-' + cfg['.name'] + '-out',
-				outbounds: map(cfg.urltest_nodes, (k) => `cfg-${k}-out`),
+				outbounds: map(cfg_urltest_nodes, (k) => `cfg-${k}-out`),
 				url: cfg.urltest_url,
 				interval: strToTime(cfg.urltest_interval),
 				tolerance: strToInt(cfg.urltest_tolerance),
 				idle_timeout: strToTime(cfg.urltest_idle_timeout),
 				interrupt_exist_connections: strToBool(cfg.urltest_interrupt_exist_connections)
 			});
-			urltest_nodes = [...urltest_nodes, ...filter(cfg.urltest_nodes, (l) => !~index(urltest_nodes, l))];
+			urltest_nodes = [...urltest_nodes, ...filter(cfg_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 		} else {
 			const outbound = uci.get_all(uciconfig, cfg.node) || {};
 			if (outbound.type === 'wireguard') {
