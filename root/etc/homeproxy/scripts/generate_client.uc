@@ -816,7 +816,7 @@ config.route = {
 		},
 		{
 			action: 'sniff',
-			sniff_timeout: '300ms'
+			timeout: '300ms'
 		}
 	],
 	rule_set: [],
