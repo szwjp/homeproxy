@@ -528,7 +528,7 @@ return view.extend({
 		so.placeholder = '180';
 		so.validate = function(section_id, value) {
 			if (section_id && value) {
-				let idle_timeout = this.section.formvalue(section_id, 'idle_timeout') || '1800';
+				let idle_timeout = this.section.formvalue(section_id, 'urltest_idle_timeout') || '1800';
 				if (parseInt(value) > parseInt(idle_timeout))
 					return _('Test interval must be less or equal than idle timeout.');
 			}

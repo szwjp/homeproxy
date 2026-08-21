@@ -171,7 +171,7 @@ uci.foreach(uciconfig, ucidnsrule, (cfg) => {
 				uci.set(uciconfig, ucirouting, 'default_outbound_dns', cfg.server);
 				break;
 			default:
-				uci.set(uciconfig, cfg.outbound, 'domain_resolver', cfg.server);
+				uci.set(uciconfig, outbound, 'domain_resolver', cfg.server);
 				break;
 			}
 		});

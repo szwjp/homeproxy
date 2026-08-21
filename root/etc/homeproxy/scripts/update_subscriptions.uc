@@ -53,8 +53,14 @@ function filter_check(name) {
 
 	let ret = false;
 	for (let i in filter_keywords) {
-		const patten = regexp(i);
-		if (match(name, patten))
+		let patten;
+		try {
+			patten = regexp(i);
+		} catch(e) {
+			log(sprintf('Skipping invalid filter keyword regex: %s.', i));
+			continue;
+		}
+		if (patten && match(name, patten))
 			ret = true;
 	}
 	if (filter_mode === 'whitelist')
@@ -502,7 +508,7 @@ function main() {
 		} catch(e) {
 			log(sprintf('JSON parse failed for %s, trying base64: %s', url, e.message));
 			nodes = decodeBase64Str(res);
-			nodes = nodes ? split(trim(replace(nodes, / /g, '_')), '\n') : [];
+			nodes = nodes ? split(trim(nodes), '\n') : [];
 		}
 
 		let count = 0;

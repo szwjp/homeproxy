@@ -86,7 +86,7 @@ export function isEmpty(res) {
 };
 
 export function strToBool(str) {
-	return (str === '1') || null;
+	return str === '1' ? true : (str === '0' ? false : null);
 };
 
 export function strToInt(str) {

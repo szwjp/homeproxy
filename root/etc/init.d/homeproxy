@@ -63,15 +63,17 @@ start_service() {
 	uname -r | grep -Eq "^6\.6" && disable_gso=1
 
 	if [ "$outbound_node" != "nil" ]; then
-		# Wait for WAN to be up: sing-box must download its rule-sets on first
-		# start (cache.db is RAM-backed and empty after a reboot), so starting
-		# before WAN is ready makes it FATAL on every boot. Proceed anyway
-		# after 60s to avoid blocking boot forever if WAN never comes up.
+		# Wait for network to be up (any default route, not a hard-coded single
+		# 'wan' interface) so sing-box can reach its rule-set sources on first
+		# boot. Proceed anyway after 60s to avoid blocking boot forever if the
+		# network never comes up.
 		local wan_waited=0
-		while ! ifstatus wan 2>"/dev/null" | grep -q '"up": true'; do
+		while ! { ip route show default 2>"/dev/null" | grep -q . \
+			|| ip -6 route show default 2>"/dev/null" | grep -q . \
+			|| ifstatus wan 2>"/dev/null" | grep -q '"up": true'; }; do
 			wan_waited=$((wan_waited + 1))
 			if [ "$wan_waited" -ge 60 ]; then
-				log "WARNING: WAN not up after 60s, starting sing-box anyway."
+				log "WARNING: No network route after 60s, starting sing-box anyway."
 				break
 			fi
 			sleep 1

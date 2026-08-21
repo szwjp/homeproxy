@@ -123,7 +123,8 @@ uci.foreach(uciconfig, uciserver, (cfg) => {
 			certificate_path: cfg.tls_cert_path,
 			key_path: cfg.tls_key_path,
 			acme: (cfg.tls_acme === '1') ? {
-				domain: cfg.tls_acme_domain,
+				domain: (type(cfg.tls_acme_domain) === 'array') ? cfg.tls_acme_domain
+					: (isEmpty(cfg.tls_acme_domain) ? [] : [cfg.tls_acme_domain]),
 				data_directory: HP_DIR + '/certs',
 				default_server_name: cfg.tls_acme_dsn,
 				email: cfg.tls_acme_email,

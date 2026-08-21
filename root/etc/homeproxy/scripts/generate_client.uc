@@ -815,7 +815,8 @@ config.route = {
 			action: 'hijack-dns'
 		},
 		{
-			action: 'sniff'
+			action: 'sniff',
+			sniff_timeout: '300ms'
 		}
 	],
 	rule_set: [],
