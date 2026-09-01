@@ -4,17 +4,29 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 
 ## Fork Changes
 
-### sing-box v1.13.14 兼容性修复
+### sing-box 1.13 / 1.14 双版本兼容
 
-- **sniff 字段迁移** — 4 个入站（mixed / redirect / tproxy / tun）删除已废弃的 `sniff` 和 `sniff_override_destination`（自 1.12.0 移除），改为路由规则 `action: sniff`
-- **`default_domain_resolver` 修正** — 删除多余的 `action` 字段，符合 sing-box 拨号字段规范
-- **死代码清理** — 移除未使用的 `sniff_override` 变量
+sing-box 1.14.0 对 DNS 配置引入破坏性变更：DNS 规则中出现 `ip_version`/`query_type` 时，与 legacy 字段（无 `match_response` 的 `ip_cidr`/`ip_is_private`、`strategy` action 选项、`rule_set_ip_cidr_accept_empty`）同配置即启动拒绝；DNS 规则引用含 IP 数据的规则集（如 geoip-cn）同样被拒。修复后同一份生成逻辑可同时运行于 1.13 与 1.14，升级内核平滑过渡。
+
+改动（`root/etc/homeproxy/scripts/generate_client.uc`）：
+
+- **版本探测** — 启动时解析 `sing-box version`，`sb_ge_114` 标记 ≥1.14 内核
+- **内置 DNS 规则** — ≥1.14 时不再输出 legacy `strategy`（geosite-cn 规则），并移除 DNS 阶段引用 geoip-cn 的逻辑兜底规则（路由阶段 `geoip-cn → direct-out` 分流不受影响）
+- **自定义 DNS 规则** — ≥1.14 且同一 DNS 配置存在 `ip_version`/`query_type` 时，丢弃 legacy `ip_cidr`/`ip_is_private`/`strategy`/`rule_set_ip_cidr_accept_empty`，避免启动被拒
+
+行为说明：
+
+- 1.13 下配置输出与之前完全一致，无行为变化
+- 1.14 下 DNS 阶段 geoip 兜底降级（此类域名改走主 DNS 解析，路由分流不变）
+实测自己的环境通过（ImmortalWrt x86_64，bypass_mainland_china + tun），见下表
+| sing-box | 服务  | 进程  | 代理出网  | 国内直连  |
+|----------|------|------|----------|----------|
+| 1.13.21 | RUNNING | 存活 | 204 | 200 |
+| 1.14.0 | RUNNING | 存活 | 204 | 200 |
 
 ### 规则集更新源替换
 
-上游默认更新源分流规则更新不及时，已替换为活跃维护的规则集源：
-
-<img width="1190" height="148" alt="ruleset sources" src="https://github.com/user-attachments/assets/476ccfc8-33da-40a7-8e3a-91502c5c427c" />
+上游默认更新源分流规则更新不及时，已替换为活跃维护的规则集源
 
 ### Bug 修复
 
@@ -37,11 +49,6 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 | 文件截断简化 | `echo 2>"/dev/null" > file` → `: > file` |
 | stop 日志恢复 | fw4 reload 失败时保留警告日志 |
 
-### CI/CD 优化
-
-- 产物发布改为固定 tag `luci-app-homeproxy`，覆盖式更新
-- 添加 concurrency 防止重叠编译
-- 发布前自动清理旧 assets
 
 ### DNS 修复：NAPTR 查询超时
 

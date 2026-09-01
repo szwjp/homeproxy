@@ -7,7 +7,7 @@
 
 'use strict';
 
-import { readfile, writefile } from 'fs';
+import { popen, readfile, writefile } from 'fs';
 import { isnan } from 'math';
 import { connect } from 'ubus';
 import { cursor } from 'uci';
@@ -411,6 +411,23 @@ function get_ruleset(cfg) {
 }
 /* Config helper end */
 
+/* sing-box version gate: since 1.14.0, a DNS config that mixes
+   ip_version/query_type with legacy options (ip_cidr, ip_is_private,
+   strategy, rule_set_ip_cidr_accept_empty) is rejected at startup.
+   Keep emitting the legacy fields on 1.13 so the same code supports both. */
+function singbox_major_minor() {
+	const fd = popen('/usr/bin/sing-box version');
+	if (!fd)
+		return null;
+	const line = trim(fd.read('line') || '');
+	fd.close();
+	const m = match(line, /^sing-box version (\d+)\.(\d+)/);
+	return m ? [int(m[1]), int(m[2])] : null;
+}
+
+const sb_ver = singbox_major_minor();
+const sb_ge_114 = sb_ver ? (sb_ver[0] > 1 || (sb_ver[0] === 1 && sb_ver[1] >= 14)) : false;
+
 const config = {};
 
 /* Log */
@@ -513,24 +530,31 @@ if (!isEmpty(main_node)) {
 			rule_set: 'geosite-cn',
 			action: 'route',
 			server: 'china-dns',
-			strategy: 'prefer_ipv6'
+			/* legacy strategy action option is rejected by sing-box >= 1.14.0
+			   when combined with query_type rules in the same DNS config */
+			strategy: sb_ge_114 ? null : 'prefer_ipv6'
 		});
-		push(config.dns.rules, {
-			type: 'logical',
-			mode: 'and',
-			rules: [
-				{
-					rule_set: 'geosite-noncn',
-					invert: true
-				},
-				{
-					rule_set: 'geoip-cn'
-				}
-			],
-			action: 'route',
-			server: 'china-dns',
-			strategy: 'prefer_ipv6'
-		});
+		/* sing-box >= 1.14.0 rejects DNS rules that reference IP-class
+		   rule-sets (geoip-cn) unless the response is explicitly matched via
+		   evaluate/match_response; drop this DNS-stage geoip fallback there.
+		   Route-stage geoip-cn matching (CN IP -> direct) is unaffected. */
+		if (!sb_ge_114)
+			push(config.dns.rules, {
+				type: 'logical',
+				mode: 'and',
+				rules: [
+					{
+						rule_set: 'geosite-noncn',
+						invert: true
+					},
+					{
+						rule_set: 'geoip-cn'
+					}
+				],
+				action: 'route',
+				server: 'china-dns',
+				strategy: 'prefer_ipv6'
+			});
 	}
 } else if (!isEmpty(default_outbound)) {
 	/* DNS servers */
@@ -562,6 +586,17 @@ if (!isEmpty(main_node)) {
 	});
 
 	/* DNS rules */
+	/* sing-box >= 1.14.0 also rejects the legacy options above when the same
+	   DNS config contains ip_version/query_type in any rule */
+	let dns_rule_has_ver_qtype = false;
+	uci.foreach(uciconfig, ucidnsrule, (cfg) => {
+		if (cfg.enabled !== '1')
+			return null;
+		if (strToInt(cfg.ip_version) || !isEmpty(parse_dnsquery(cfg.query_type)))
+			dns_rule_has_ver_qtype = true;
+	});
+	const drop_legacy_dns_fields = sb_ge_114 && dns_rule_has_ver_qtype;
+
 	uci.foreach(uciconfig, ucidnsrule, (cfg) => {
 		if (cfg.enabled !== '1')
 			return;
@@ -579,8 +614,8 @@ if (!isEmpty(main_node)) {
 			port_range: cfg.port_range,
 			source_ip_cidr: cfg.source_ip_cidr,
 			source_ip_is_private: strToBool(cfg.source_ip_is_private),
-			ip_cidr: cfg.ip_cidr,
-			ip_is_private: strToBool(cfg.ip_is_private),
+			ip_cidr: drop_legacy_dns_fields ? null : cfg.ip_cidr,
+			ip_is_private: drop_legacy_dns_fields ? null : strToBool(cfg.ip_is_private),
 			source_port: parse_port(cfg.source_port),
 			source_port_range: cfg.source_port_range,
 			process_name: cfg.process_name,
@@ -589,11 +624,11 @@ if (!isEmpty(main_node)) {
 			user: cfg.user,
 			rule_set: get_ruleset(cfg.rule_set),
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
-			rule_set_ip_cidr_accept_empty: strToBool(cfg.rule_set_ip_cidr_accept_empty),
+			rule_set_ip_cidr_accept_empty: drop_legacy_dns_fields ? null : strToBool(cfg.rule_set_ip_cidr_accept_empty),
 			invert: strToBool(cfg.invert),
 			action: cfg.action,
 			server: get_resolver(cfg.server),
-			strategy: cfg.domain_strategy,
+			strategy: drop_legacy_dns_fields ? null : cfg.domain_strategy,
 			disable_cache: strToBool(cfg.dns_disable_cache),
 			rewrite_ttl: strToInt(cfg.rewrite_ttl),
 			client_subnet: cfg.client_subnet,
