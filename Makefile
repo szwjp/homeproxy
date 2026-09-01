@@ -13,8 +13,8 @@ LUCI_DEPENDS:= \
 	+ucode-mod-digest
 
 PKG_NAME:=luci-app-homeproxy
-PKG_VERSION:=27.820.3
-PKG_RELEASE:=3
+PKG_VERSION:=27.901.1
+PKG_RELEASE:=1
 
 define Package/luci-app-homeproxy/conffiles
 /etc/config/homeproxy
