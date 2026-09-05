@@ -1,42 +1,8 @@
 # luci-app-homeproxy
 The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box
 
-## Fork Changes
-### sing-box 版本支持
-**本项目面向 sing-box 1.13.x 开发（实测sing-box≤1.13.21兼容）。sing-box 1.14.0 变更了 DNS 规则的校验与语义，与之不兼容，因此本fork不再提供1.14兼容逻辑。
+## Fork Changes   sing-box 版本支持
 
-**想尝试sing-box 1.14请移步 https://github.com/szwjp/luci-app-homeproxy 分支；处于测试阶段，运行基本稳定但还存在不确定因素。
+本项目面向 sing-box 1.13.x 开发（实测sing-box≤1.13.21兼容）。sing-box 1.14.0 变更了 DNS 规则的校验与语义，与之不兼容，因此本fork不再提供1.14兼容逻辑。
 
-### 规则集更新源替换
-上游默认更新源分流规则更新不及时，已替换为活跃维护的规则集源
-
-### Bug 修复
-| 文件                                      | 问题                               | 修复 |
-|----------------------|--------------------------------------------------------|--------------------------------|
-| `generate_server.uc` | ACME `disable_tls_alpn_challenge` 字符串 `'0'` 被当 true | 改用 `strToBool()`             |
-| `update_subscriptions.uc` | 默认路由模式拼写 `bypass_mainalnd_china`。            | 修正为 `bypass_mainland_china` |
-
-### init 脚本修复与性能优化
-文件：`root/etc/init.d/homeproxy`
-| 改动 | 说明 |
-|------|------|
-| 重定向语法修复 | `2>\&1` → `2>&1`，原写法会创建名为 `&1` 的垃圾文件 |
-| DNS 规则累积修复 | `redirect-dns.conf` 由 `>>` 改为 `>`，防止重启后规则叠加 |
-| nft 批量化 | 50 次 nft fork → 单次 `nft -f -`，降低嵌入式设备开销 |
-| chown 精确化 | `chown -R` 整目录 → 仅匹配 sing-box 相关文件 |
-| 内核检测去重 | 两处 `uname -r \| grep` → 一次变量缓存 |
-| 文件截断简化 | `echo 2>"/dev/null" > file` → `: > file` |
-| stop 日志恢复 | fw4 reload 失败时保留警告日志 |
-
-
-### DNS 修复：NAPTR 查询超时
-sing-box 客户端日志持续报 `dns: exchange failed for ...r.10086.cn IN NAPTR: context deadline exceeded`（中国移动 VoLTE/IMS 域，TTL 仅 37s）。原因：内置 `query_type [64,65]` 拒绝规则只拦 SVCB/HTTPS，不含 NAPTR(35)；查询落入慢路径（china-dns 223.5.5.5 对 NAPTR 有秒级慢首响应，非 CN 域走代理）。
-修复：`generate_client.uc` 新增 DNS 规则——NAPTR 查询 + `r.10086.cn` / `10086.cn` / `pub.3gppnetwork.org` 域名**直连 ISP 本地 DNS（`default-dns`）**，实测 29~248ms 稳定返回，不再超时。
-
-### 启动修复：开机规则集下载 FATAL
-每次重启 sing-box 必现 `FATAL: initialize rule-set ... no route to internet`。原因：① `cache.db` 在 /tmp（内存盘）重启即清空；② homeproxy 开机约 8 秒即启动，而 PPPoE 拨号需 15-25 秒，规则集下载必然失败。
-修复：
-- `init.d/homeproxy`：`start_service` 增加**等 WAN 循环**（60 秒上限，WAN 未就绪不启动 sing-box）
-- `generate_client.uc` + `init.d/homeproxy`：**`cache.db` 迁移到持久化的 `/etc/homeproxy/cache.db`**，规则集跨重启保留，开机即使断网也能从缓存启动
-
-验证：真实重启后 FATAL 从每次 1 条降为 **0 条**。
+想尝试sing-box 1.14请移步 https://github.com/szwjp/luci-app-homeproxy 分支；处于测试阶段，运行基本稳定但还存在不确定因素。
