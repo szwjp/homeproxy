@@ -3,7 +3,7 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box
 
 ## Fork Changes
 ### sing-box 版本支持
-**本项目面向 sing-box 1.13.x 开发（实测sing-box1.13.21及以下版本兼容）。sing-box 1.14.0 变更了 DNS 规则的校验与语义（`ip_version`/`query_type` 与 legacy 字段互斥、DNS 规则禁止引用 IP 类规则集），与之不兼容，因此本 fork 不提供 1.14 兼容逻辑。
+**本项目面向 sing-box 1.13.x 开发（实测sing-box≤1.13.21兼容）。sing-box 1.14.0 变更了 DNS 规则的校验与语义，与之不兼容，因此本fork不再提供1.14兼容逻辑。
 
 **想尝试sing-box 1.14请移步 https://github.com/szwjp/luci-app-homeproxy 分支；处于测试阶段，运行基本稳定但还存在不确定因素。
 
@@ -11,10 +11,10 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box
 上游默认更新源分流规则更新不及时，已替换为活跃维护的规则集源
 
 ### Bug 修复
-| 文件 | 问题 | 修复 |
-|------|------|------|
-| `generate_server.uc` | ACME `disable_tls_alpn_challenge` 字符串 `'0'` 被当 true | 改用 `strToBool()` |
-| `update_subscriptions.uc` | 默认路由模式拼写 `bypass_mainalnd_china` | 修正为 `bypass_mainland_china` |
+| 文件                                      | 问题                               | 修复 |
+|----------------------|--------------------------------------------------------|--------------------------------|
+| `generate_server.uc` | ACME `disable_tls_alpn_challenge` 字符串 `'0'` 被当 true | 改用 `strToBool()`             |
+| `update_subscriptions.uc` | 默认路由模式拼写 `bypass_mainalnd_china`。            | 修正为 `bypass_mainland_china` |
 
 ### init 脚本修复与性能优化
 文件：`root/etc/init.d/homeproxy`
