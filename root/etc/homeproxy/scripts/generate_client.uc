@@ -845,12 +845,20 @@ if (!isEmpty(main_node)) {
 		});
 
 	/* Bypass CN traffic */
-	if (routing_mode === 'bypass_mainland_china')
+	if (routing_mode === 'bypass_mainland_china') {
+		/* Domain-dimension split first: match CN domains by rule-set and go
+		   direct before geoip-cn, so they never need IP resolution. */
+		push(config.route.rules, {
+			rule_set: 'geosite-cn',
+			action: 'route',
+			outbound: 'direct-out'
+		});
 		push(config.route.rules, {
 			rule_set: 'geoip-cn',
 			action: 'route',
 			outbound: 'direct-out'
 		});
+	}
 
 	/* Main UDP out */
 	if (dedicated_udp_node) {
