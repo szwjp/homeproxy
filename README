@@ -6,7 +6,8 @@ The modern ImmortalWrt proxy platform for ARM64/AMD64, based on sing-box.
 
 ### sing-box 版本支持
 
-## **本项目面向 sing-box 1.13.x 开发（实测 1.13.21）。sing-box 1.14.0 变更了 DNS 规则的校验与语义（`ip_version`/`query_type` 与 legacy 字段互斥、DNS 规则禁止引用 IP 类规则集），与之不兼容，因此本 fork 不提供 1.14 兼容逻辑。**
+> [!IMPORTANT]
+> **本项目面向 sing-box 1.13.x 开发（实测 1.13.21）。sing-box 1.14.0 变更了 DNS 规则的校验与语义（`ip_version`/`query_type` 与 legacy 字段互斥、DNS 规则禁止引用 IP 类规则集），与之不兼容，因此本 fork 不提供 1.14 兼容逻辑。**
 
 ### 规则集更新源替换
 
