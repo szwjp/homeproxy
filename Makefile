@@ -13,7 +13,7 @@ LUCI_DEPENDS:= \
 	+ucode-mod-digest
 
 PKG_NAME:=luci-app-homeproxy
-PKG_VERSION:=27.901.1
+PKG_VERSION:=27.905.1.13
 PKG_RELEASE:=1
 
 define Package/luci-app-homeproxy/conffiles
@@ -27,4 +27,3 @@ endef
 include $(TOPDIR)/feeds/luci/luci.mk
 
 # call BuildPackage - OpenWrt buildroot signature
-
