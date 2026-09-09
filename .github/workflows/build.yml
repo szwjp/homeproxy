@@ -22,6 +22,11 @@ env:
   # 升级这个 SHA 时，下面的缓存 key 会自动失效并重新编译一次。
   APK_TOOLS_REF: 'b5a31c0d865342ad80be10d68f1bb3d3ad9b0866'
 
+  # po/ 目录到 LuCI i18n 包名的映射，build-pkg.sh 会读这个 env 来填
+  # LUCI_LOCALE_MAP。要加语言就在这里加，build-pkg.sh 不用动。
+  # 格式：<po_dir>=<i18n_locale>，多个用逗号分隔。
+  LUCI_LANGUAGES: 'zh_Hans=zh-cn,zh_Hant=zh-tw,pt_BR=pt-br,bn_BD=bn'
+
 jobs:
   # -------------------------------------------------------------------------
   # 1. 版本检查 + 创建 release 壳

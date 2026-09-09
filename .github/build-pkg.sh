@@ -172,12 +172,26 @@ fi
 
 # Best-effort LuCI locale code mapping (po dir name -> LuCI i18n code).
 # Unmapped locales fall back to a lowercased, hyphenated dir name.
-declare -A LUCI_LOCALE_MAP=(
-	[zh_Hans]="zh-cn"
-	[zh_Hant]="zh-tw"
-	[pt_BR]="pt-br"
-	[bn_BD]="bn"
-)
+#
+# 优先读 env LUCI_LANGUAGES（workflow 层在 .github/workflows/build.yml
+# 里集中维护），没设就走下方兜底列表，方便本地手跑不依赖 workflow。
+declare -A LUCI_LOCALE_MAP=()
+if [ -n "${LUCI_LANGUAGES:-}" ]; then
+	# 形如 "zh_Hans=zh-cn,zh_Hant=zh-tw,bn_BD=bn"
+	IFS=',' read -ra _luci_lang_pairs <<< "$LUCI_LANGUAGES"
+	for _pair in "${_luci_lang_pairs[@]}"; do
+		_key="${_pair%%=*}"
+		_val="${_pair#*=}"
+		[ -n "$_key" ] && [ -n "$_val" ] && LUCI_LOCALE_MAP["$_key"]="$_val"
+	done
+	unset _luci_lang_pairs _pair _key _val
+fi
+if [ "${#LUCI_LOCALE_MAP[@]}" -eq 0 ]; then
+	LUCI_LOCALE_MAP[zh_Hans]="zh-cn"
+	LUCI_LOCALE_MAP[zh_Hant]="zh-tw"
+	LUCI_LOCALE_MAP[pt_BR]="pt-br"
+	LUCI_LOCALE_MAP[bn_BD]="bn"
+fi
 
 declare -a I18N_PACKAGES=()
 
