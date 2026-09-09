@@ -45,6 +45,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 手动 trigger 时把 Makefile 的 PKG_RELEASE +1 并 commit 推回 master，
+      # 这样用户不用每次手动改 Makefile。本地 working tree 改完后，
+      # 后续 "Parse Makefile version" 直接读到 +1 后的值。
+      # 注：用 GITHUB_TOKEN push 到 master，依赖权限块里已经声明的
+      # contents: write；不配 push trigger 所以不会无限循环。
+      - name: Auto-bump PKG_RELEASE on manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -e
+          current=$(awk -F ':=' '/^PKG_RELEASE:=/ {print $2}' Makefile | tr -d ' \n')
+          next=$((current + 1))
+          echo "PKG_RELEASE: ${current} -> ${next}"
+          sed -i "s/^PKG_RELEASE:=${current}/PKG_RELEASE:=${next}/" Makefile
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Makefile
+          git commit -m "bump PKG_RELEASE to ${next}"
+          git push
+
       - name: Parse Makefile version
         id: check_version
         env:
