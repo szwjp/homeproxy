@@ -94,35 +94,12 @@ jobs:
         env:
           VERSION: ${{ steps.check_version.outputs.version }}
         run: |
+          # 极简 body：只放一个 shields.io 下载量 badge。
+          # 瀑布流里 title 已经显示 v<version>，左 list 也有版本号，
+          # changelog / commit 列表 / "First tagged release" 之类的元数据用户
+          # 都不想要，保持最干净。
           {
             echo "![](https://img.shields.io/github/downloads/${GITHUB_REPOSITORY}/v${VERSION}/total?style=flat-square)"
-            echo
-            echo "### Changes since previous tag"
-            echo
-            # 找最近一个 v 开头的 tag 作为基准，limit 50 条防止 release body 失控。
-            # 注意：必须先把 git log 写到临时文件再 head，否则 set -o pipefail
-            # 下 head 关闭管道会让 git log 收到 SIGPIPE (exit 141) — profile
-            # 第 8 条 lesson 的同款反模式，这里以"两步走"避免。
-            PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | grep -v "v${VERSION}\$" | head -1 || true)
-            if [ -n "$PREV_TAG" ]; then
-              echo "_From \`${PREV_TAG}\` to \`v${VERSION}\`_"
-              echo
-              echo '```'
-              git log --pretty=format:'- %s' "${PREV_TAG}..HEAD" > /tmp/_commits.txt
-              head -50 /tmp/_commits.txt
-              rm -f /tmp/_commits.txt
-              echo
-              echo '```'
-            else
-              echo "_First tagged release_"
-              echo
-              echo '```'
-              git log --pretty=format:'- %s' > /tmp/_commits.txt
-              head -50 /tmp/_commits.txt
-              rm -f /tmp/_commits.txt
-              echo
-              echo '```'
-            fi
           } > release.txt
           echo "--- release.txt ---"
           cat release.txt
