@@ -227,10 +227,9 @@ if [ -d "$PKG_DIR/po" ]; then
 				--info "depends:$PKG_NAME" \
 				--files "$i18n_dir" \
 				--output "$TEMP_DIR/${i18n_name}-${PKG_VERSION}.apk"
-			# apk-tools v3 规范要求 <name>_<version>_<arch>.<ext>，noarch 包用 _all。
-			# 顺手把 I18N_PACKAGES 数组里的引用也同步更新。
-			mv "$TEMP_DIR/${i18n_name}-${PKG_VERSION}.apk" "$BASE_DIR/${i18n_name}_${PKG_VERSION}_all.apk"
-			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}_${PKG_VERSION}_all.apk")
+			# apk-tools v3 规范：<name>-<version>.apk，noarch 不加 _all。
+			mv "$TEMP_DIR/${i18n_name}-${PKG_VERSION}.apk" "$BASE_DIR/${i18n_name}-${PKG_VERSION}.apk"
+			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}-${PKG_VERSION}.apk")
 		else
 			mkdir -p "$i18n_dir/CONTROL/"
 			cat > "$i18n_dir/CONTROL/control" <<-EOF
@@ -241,9 +240,10 @@ if [ -d "$PKG_DIR/po" ]; then
 				Description: $DESCRIPTION ($locale translation)
 			EOF
 			ipkg-build -m "" "$i18n_dir" "$TEMP_DIR"
-			# ipkg-build 天然产出 _all.ipk；保留 _all 以匹配 apk-tools v3 规范。
-			mv "$TEMP_DIR/${i18n_name}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${i18n_name}_${PKG_VERSION}_all.ipk"
-			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}_${PKG_VERSION}_all.ipk")
+			# ipkg 默认产出 <name>_<version>_<arch>.ipk；保持 homeproxy 一贯的
+			# 紧凑命名 <name>-<version>.ipk，noarch 也不带 _all。
+			mv "$TEMP_DIR/${i18n_name}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${i18n_name}-${PKG_VERSION}.ipk"
+			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}-${PKG_VERSION}.ipk")
 		fi
 	done
 fi
@@ -336,8 +336,8 @@ if [ "$PKG_MGR" == "apk" ]; then
 		--files "$TEMP_PKG_DIR" \
 		--output "$TEMP_DIR/${PKG_NAME}-${PKG_VERSION}.apk"
 
-	# apk-tools v3 规范要求 <name>_<version>_<arch>.<ext>，noarch 包用 _all。
-	mv "$TEMP_DIR/${PKG_NAME}-${PKG_VERSION}.apk" "$BASE_DIR/${PKG_NAME}_${PKG_VERSION}_all.apk"
+	# apk-tools v3 规范：<name>-<version>.apk，noarch 不加 _all。
+	mv "$TEMP_DIR/${PKG_NAME}-${PKG_VERSION}.apk" "$BASE_DIR/${PKG_NAME}-${PKG_VERSION}.apk"
 else
 	mkdir -p "$TEMP_PKG_DIR/CONTROL/"
 
@@ -395,8 +395,9 @@ else
 
 	ipkg-build -m "" "$TEMP_PKG_DIR" "$TEMP_DIR"
 
-	# ipkg-build 天然产出 _all.ipk；保留 _all 以匹配 apk-tools v3 规范。
-	mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk"
+	# ipkg 默认产出 <name>_<version>_<arch>.ipk；保持 homeproxy 一贯的
+	# 紧凑命名 <name>-<version>.ipk，noarch 也不带 _all。
+	mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${PKG_NAME}-${PKG_VERSION}.ipk"
 fi
 
 echo "Done. Output in $BASE_DIR:"

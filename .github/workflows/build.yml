@@ -221,10 +221,10 @@ jobs:
           fakeroot bash .github/build-pkg.sh apk "${{ github.event_name }}"
           fakeroot bash .github/build-pkg.sh ipk "${{ github.event_name }}"
           shopt -s nullglob
-          apks=(.github/*_all.apk)
-          ipks=(.github/*_all.ipk)
+          apks=(.github/luci-*.apk)
+          ipks=(.github/luci-*.ipk)
           if [ "${#apks[@]}" -eq 0 ] || [ "${#ipks[@]}" -eq 0 ]; then
-            echo "::error::未生成预期的 *_all.apk / *_all.ipk 文件"
+            echo "::error::未生成预期的 luci-*.apk / luci-*.ipk 文件"
             ls -la .github/*.apk .github/*.ipk 2>/dev/null || true
             exit 1
           fi
@@ -236,14 +236,14 @@ jobs:
           name: homeproxy-packages-${{ needs.job_check.outputs.version }}
           include-hidden-files: true
           path: |
-            .github/*_all.apk
-            .github/*_all.ipk
+            .github/luci-*.apk
+            .github/luci-*.ipk
 
       - name: Attach packages to release
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0
         with:
           tag_name: v${{ needs.job_check.outputs.version }}
           files: |
-            .github/*_all.apk
-            .github/*_all.ipk
+            .github/luci-*.apk
+            .github/luci-*.ipk
           token: ${{ github.token }}
