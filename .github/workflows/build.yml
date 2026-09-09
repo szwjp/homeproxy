@@ -133,7 +133,7 @@ jobs:
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0
         with:
           tag_name: v${{ steps.check_version.outputs.version }}
-          name: "luci-app-homeproxy v${{ steps.check_version.outputs.version }}"
+          name: v${{ steps.check_version.outputs.version }}
           body_path: release.txt
           # 第一次只建 release + 写 body，不传 files；资产由 job_build 追加。
           # 这样 build job 失败时 release 仍然存在，可单独重试 build job。
