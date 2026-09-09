@@ -172,12 +172,26 @@ fi
 
 # Best-effort LuCI locale code mapping (po dir name -> LuCI i18n code).
 # Unmapped locales fall back to a lowercased, hyphenated dir name.
-declare -A LUCI_LOCALE_MAP=(
-	[zh_Hans]="zh-cn"
-	[zh_Hant]="zh-tw"
-	[pt_BR]="pt-br"
-	[bn_BD]="bn"
-)
+#
+# 优先读 env LUCI_LANGUAGES（workflow 层在 .github/workflows/build.yml
+# 里集中维护），没设就走下方兜底列表，方便本地手跑不依赖 workflow。
+declare -A LUCI_LOCALE_MAP=()
+if [ -n "${LUCI_LANGUAGES:-}" ]; then
+	# 形如 "zh_Hans=zh-cn,zh_Hant=zh-tw,bn_BD=bn"
+	IFS=',' read -ra _luci_lang_pairs <<< "$LUCI_LANGUAGES"
+	for _pair in "${_luci_lang_pairs[@]}"; do
+		_key="${_pair%%=*}"
+		_val="${_pair#*=}"
+		[ -n "$_key" ] && [ -n "$_val" ] && LUCI_LOCALE_MAP["$_key"]="$_val"
+	done
+	unset _luci_lang_pairs _pair _key _val
+fi
+if [ "${#LUCI_LOCALE_MAP[@]}" -eq 0 ]; then
+	LUCI_LOCALE_MAP[zh_Hans]="zh-cn"
+	LUCI_LOCALE_MAP[zh_Hant]="zh-tw"
+	LUCI_LOCALE_MAP[pt_BR]="pt-br"
+	LUCI_LOCALE_MAP[bn_BD]="bn"
+fi
 
 declare -a I18N_PACKAGES=()
 
@@ -213,6 +227,7 @@ if [ -d "$PKG_DIR/po" ]; then
 				--info "depends:$PKG_NAME" \
 				--files "$i18n_dir" \
 				--output "$TEMP_DIR/${i18n_name}-${PKG_VERSION}.apk"
+			# apk-tools v3 规范：<name>-<version>.apk，noarch 不加 _all。
 			mv "$TEMP_DIR/${i18n_name}-${PKG_VERSION}.apk" "$BASE_DIR/${i18n_name}-${PKG_VERSION}.apk"
 			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}-${PKG_VERSION}.apk")
 		else
@@ -225,6 +240,8 @@ if [ -d "$PKG_DIR/po" ]; then
 				Description: $DESCRIPTION ($locale translation)
 			EOF
 			ipkg-build -m "" "$i18n_dir" "$TEMP_DIR"
+			# ipkg 默认产出 <name>_<version>_<arch>.ipk；保持 homeproxy 一贯的
+			# 紧凑命名 <name>-<version>.ipk，noarch 也不带 _all。
 			mv "$TEMP_DIR/${i18n_name}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${i18n_name}-${PKG_VERSION}.ipk"
 			I18N_PACKAGES+=("$BASE_DIR/${i18n_name}-${PKG_VERSION}.ipk")
 		fi
@@ -319,6 +336,7 @@ if [ "$PKG_MGR" == "apk" ]; then
 		--files "$TEMP_PKG_DIR" \
 		--output "$TEMP_DIR/${PKG_NAME}-${PKG_VERSION}.apk"
 
+	# apk-tools v3 规范：<name>-<version>.apk，noarch 不加 _all。
 	mv "$TEMP_DIR/${PKG_NAME}-${PKG_VERSION}.apk" "$BASE_DIR/${PKG_NAME}-${PKG_VERSION}.apk"
 else
 	mkdir -p "$TEMP_PKG_DIR/CONTROL/"
@@ -377,6 +395,8 @@ else
 
 	ipkg-build -m "" "$TEMP_PKG_DIR" "$TEMP_DIR"
 
+	# ipkg 默认产出 <name>_<version>_<arch>.ipk；保持 homeproxy 一贯的
+	# 紧凑命名 <name>-<version>.ipk，noarch 也不带 _all。
 	mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${PKG_NAME}-${PKG_VERSION}.ipk"
 fi
 

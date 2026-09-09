@@ -1,12 +1,15 @@
 name: Build
 
 on:
-  push:
-    branches: [master]
-  pull_request:
+  # 自动 push / pull_request 触发器已移除：单文件 LuCI 插件发版节奏由人工控制，
+  # 避免每次 commit 都推 release。手动从 Actions UI 触发 workflow_dispatch。
   workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
 
-# 同一分支新的推送自动取消旧的运行，避免堆积
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -19,8 +22,127 @@ env:
   # 升级这个 SHA 时，下面的缓存 key 会自动失效并重新编译一次。
   APK_TOOLS_REF: 'b5a31c0d865342ad80be10d68f1bb3d3ad9b0866'
 
+  # po/ 目录到 LuCI i18n 包名的映射，build-pkg.sh 会读这个 env 来填
+  # LUCI_LOCALE_MAP。要加语言就在这里加，build-pkg.sh 不用动。
+  # 格式：<po_dir>=<i18n_locale>，多个用逗号分隔。
+  LUCI_LANGUAGES: 'zh_Hans=zh-cn,zh_Hant=zh-tw,pt_BR=pt-br,bn_BD=bn'
+
 jobs:
-  build:
+  # -------------------------------------------------------------------------
+  # 1. 版本检查 + 创建 release 壳
+  #    解析 Makefile 里的 PKG_VERSION/PKG_RELEASE，对比远端 latest tag，
+  #    只有本地版本更高（has_update=true）才往下走 build。
+  # -------------------------------------------------------------------------
+  job_check:
+    name: Check Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check_version.outputs.version }}
+      has_update: ${{ steps.check_version.outputs.has_update }}
+    steps:
+      - name: Checkout source tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Parse Makefile version
+        id: check_version
+        env:
+          url_tags: https://api.github.com/repos/${{ github.repository }}/releases/latest
+        run: |
+          set -o pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          pkg_version=$(awk -F ':=' '/^PKG_VERSION:=/ {print $2}' Makefile | tr -d ' \n' || true)
+          pkg_release=$(awk -F ':=' '/^PKG_RELEASE:=/ {print $2}' Makefile | tr -d ' \n' || true)
+
+          if [ -z "$pkg_version" ]; then
+            echo "::error::PKG_VERSION not found in Makefile"
+            exit 1
+          fi
+
+          if [ -n "$pkg_release" ]; then
+            version="${pkg_version}-r${pkg_release}"
+          else
+            version="$pkg_version"
+          fi
+
+          echo "Local version: ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          # 取远端 latest tag。空响应或 404 一律当作 has_update=true，
+          # 让首次运行（仓库尚无 release）也能正常往下走。
+          remote_latest=$(wget -qO- -t1 -T5 "$url_tags" | jq -r '.tag_name // empty' 2>/dev/null || true)
+          if [ -z "$remote_latest" ]; then
+            echo "Remote latest tag unavailable (empty repository or transient error) — treating as has_update=true"
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Remote latest: ${remote_latest}"
+          # 去掉 v 前缀做比较
+          remote_version="${remote_latest#v}"
+
+          if [ "$version" = "$remote_version" ]; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare release body
+        if: steps.check_version.outputs.has_update == 'true'
+        env:
+          VERSION: ${{ steps.check_version.outputs.version }}
+        run: |
+          set -o pipefail
+          {
+            echo "![](https://img.shields.io/github/downloads/${GITHUB_REPOSITORY}/v${VERSION}/total?style=flat-square)"
+            echo
+            echo "### Changes since previous tag"
+            echo
+            # 找最近一个 v 开头的 tag 作为基准，limit 50 条防止 release body 失控
+            PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | grep -v "v${VERSION}\$" | head -1 || true)
+            if [ -n "$PREV_TAG" ]; then
+              echo "_From \`${PREV_TAG}\` to \`v${VERSION}\`_"
+              echo
+              echo '```'
+              git log --pretty=format:'- %s' "${PREV_TAG}..HEAD" | head -50
+              echo
+              echo '```'
+            else
+              echo "_First tagged release_"
+              echo
+              echo '```'
+              git log --pretty=format:'- %s' | head -50
+              echo
+              echo '```'
+            fi
+          } > release.txt
+          echo "--- release.txt ---"
+          cat release.txt
+          echo "--------------------"
+
+      - name: Create release
+        if: steps.check_version.outputs.has_update == 'true'
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0
+        with:
+          tag_name: v${{ steps.check_version.outputs.version }}
+          name: "luci-app-homeproxy v${{ steps.check_version.outputs.version }}"
+          body_path: release.txt
+          # 第一次只建 release + 写 body，不传 files；资产由 job_build 追加。
+          # 这样 build job 失败时 release 仍然存在，可单独重试 build job。
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}
+
+  # -------------------------------------------------------------------------
+  # 2. 编译 + 上传资产到既有 release
+  #    toolchain 准备（apk-tools cache / po2lmo / ipkg-build）原样保留；
+  #    编译产物通过 .github/build-pkg.sh 调两次产出 apk + ipk。
+  # -------------------------------------------------------------------------
+  job_build:
+    name: Build packages
+    needs: job_check
+    if: needs.job_check.outputs.has_update == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source tree
@@ -28,7 +150,6 @@ jobs:
         with:
           fetch-depth: 0   # build-pkg.sh 的 git describe/rev-parse 兜底需要完整历史
 
-      # ---------- 缓存已编译的 apk 可执行文件，命中则跳过整个 checkout+meson+ninja ----------
       - name: Cache apk-tools binary
         id: cache-apk-tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -100,10 +221,11 @@ jobs:
           fakeroot bash .github/build-pkg.sh apk "${{ github.event_name }}"
           fakeroot bash .github/build-pkg.sh ipk "${{ github.event_name }}"
           shopt -s nullglob
-          apks=(.github/*.apk)
-          ipks=(.github/*.ipk)
+          apks=(.github/luci-*.apk)
+          ipks=(.github/luci-*.ipk)
           if [ "${#apks[@]}" -eq 0 ] || [ "${#ipks[@]}" -eq 0 ]; then
-            echo "::error::未生成预期的 apk/ipk 文件"
+            echo "::error::未生成预期的 luci-*.apk / luci-*.ipk 文件"
+            ls -la .github/*.apk .github/*.ipk 2>/dev/null || true
             exit 1
           fi
           printf '生成的包:\n%s\n' "${apks[@]}" "${ipks[@]}"
@@ -111,44 +233,17 @@ jobs:
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: homeproxy-packages
+          name: homeproxy-packages-${{ needs.job_check.outputs.version }}
           include-hidden-files: true
           path: |
-            .github/*.apk
-            .github/*.ipk
+            .github/luci-*.apk
+            .github/luci-*.ipk
 
-      - name: Cleanup old release and tag
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -o pipefail
-          # 删除旧的 release（连同其 assets）与 tag，让 publish 步骤在当次 commit 上重新创建 tag，
-          # 从而避免 action-gh-release 因 tag 已存在而不推进到最新提交。
-          # 首次运行（或 release/tag 不存在）时 curl 404 属预期，用 `|| true`/`|| RELEASE_ID=""` 兜底。
-          RELEASE_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/luci-app-homeproxy" | jq -r '.id' 2>/dev/null) || RELEASE_ID=""
-          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
-            curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID" \
-              || echo "::warning::删除旧 release $RELEASE_ID 失败，继续"
-          fi
-          curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/luci-app-homeproxy" \
-            || echo "::warning::tag luci-app-homeproxy 不存在或删除失败，继续"
-
-      - name: Publish to Latest Build Release
-        if: github.event_name != 'pull_request'
+      - name: Attach packages to release
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0
         with:
-          tag_name: luci-app-homeproxy
-          name: HomeProxy Latest Build
-          body: |
-            Automatically built on ${{ github.run_id }}.
-            Commit: ${{ github.sha }}
+          tag_name: v${{ needs.job_check.outputs.version }}
           files: |
-            .github/luci-app-homeproxy-*.apk
-            .github/luci-app-homeproxy-*.ipk
-            .github/luci-i18n-homeproxy-*.apk
-            .github/luci-i18n-homeproxy-*.ipk
+            .github/luci-*.apk
+            .github/luci-*.ipk
           token: ${{ github.token }}
