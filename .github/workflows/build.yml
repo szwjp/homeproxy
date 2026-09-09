@@ -150,6 +150,11 @@ jobs:
       - name: Checkout source tree
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          # 必须 checkout 最新 master（不是 trigger 时的 SHA），因为 job_check
+          # 的 bump step 会推一个新 commit（PKG_RELEASE +1）到 master，build
+          # job 的 Makefile 必须读那个新 commit 才能让 asset 文件名和
+          # release tag 一致。否则会出现 tag=r6、asset=r5 这种错配。
+          ref: master
           fetch-depth: 0   # build-pkg.sh 的 git describe/rev-parse 兜底需要完整历史
 
       - name: Cache apk-tools binary
