@@ -4,15 +4,13 @@ on:
   # 自动 push / pull_request 触发器已移除：单文件 LuCI 插件发版节奏由人工控制，
   # 避免每次 commit 都推 release。手动从 Actions UI 触发 workflow_dispatch。
   workflow_dispatch:
-    inputs:
-      ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
 
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # 不开 cancel-in-progress：bump step 已经把新 commit 推到 origin，cancel
+  # 第一次 run 会让 release 出现但没完整 asset（job_build 还没传完）。改成
+  # 排队，连续 trigger 第二次会等第一次完整跑完再开始。
+  group: build-master
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -51,7 +49,6 @@ jobs:
       # 注：用 GITHUB_TOKEN push 到 master，依赖权限块里已经声明的
       # contents: write；不配 push trigger 所以不会无限循环。
       - name: Auto-bump PKG_RELEASE on manual trigger
-        if: github.event_name == 'workflow_dispatch'
         run: |
           set -e
           current=$(awk -F ':=' '/^PKG_RELEASE:=/ {print $2}' Makefile | tr -d ' \n')
@@ -62,7 +59,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Makefile
           git commit -m "bump PKG_RELEASE to ${next}"
-          git push
+          # 显式指定 remote+ref，避开 detached HEAD 上 'git push' 行为不可靠
+          # 的问题（之前两次 push 报 non-fast-forward 就是征兆）。
+          git push origin HEAD:master
 
       - name: Parse Makefile version
         id: check_version
@@ -120,9 +119,6 @@ jobs:
           {
             echo "![](https://img.shields.io/github/downloads/${GITHUB_REPOSITORY}/v${VERSION}/total?style=flat-square)"
           } > release.txt
-          echo "--- release.txt ---"
-          cat release.txt
-          echo "--------------------"
 
       - name: Create release
         if: steps.check_version.outputs.has_update == 'true'
@@ -133,7 +129,6 @@ jobs:
           body_path: release.txt
           # 第一次只建 release + 写 body，不传 files；资产由 job_build 追加。
           # 这样 build job 失败时 release 仍然存在，可单独重试 build job。
-          fail_on_unmatched_files: true
           token: ${{ github.token }}
 
   # -------------------------------------------------------------------------
@@ -225,8 +220,11 @@ jobs:
 
       - name: Build packages (apk + ipk)
         run: |
-          fakeroot bash .github/build-pkg.sh apk "${{ github.event_name }}"
-          fakeroot bash .github/build-pkg.sh ipk "${{ github.event_name }}"
+          # build-pkg.sh 第 2 个参数是 RELEASE_TYPE，但 homeproxy 的 Makefile
+          # 永远有 PKG_VERSION/PKG_RELEASE，RELEASE_TYPE / snapshot 兜底分支
+          # 不会触发——保留兼容性，不传。
+          fakeroot bash .github/build-pkg.sh apk
+          fakeroot bash .github/build-pkg.sh ipk
           shopt -s nullglob
           apks=(.github/luci-*.apk)
           ipks=(.github/luci-*.ipk)
